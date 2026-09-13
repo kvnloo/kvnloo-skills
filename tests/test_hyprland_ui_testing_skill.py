@@ -4,7 +4,12 @@ import re
 from pathlib import Path
 
 
-SKILL_MD = Path(__file__).resolve().parents[1] / "SKILL.md"
+SKILL_MD = (
+    Path(__file__).resolve().parents[1]
+    / "linux-system-admin"
+    / "hyprland-ui-testing"
+    / "SKILL.md"
+)
 
 
 def _text() -> str:

@@ -1,27 +1,30 @@
-# hyprland-ui-testing
+# kvnloo-skills
 
-Hermes skill: test GTK, Wayland, and TUI apps on Hyprland without mapping onto the user's focused workspace.
+Personal Hermes skills. Install a skill by copying its directory into `~/.hermes/skills/<category>/` or a profile's `skills/` tree.
 
-Origin: same skill as [NousResearch/hermes-agent#102382](https://github.com/NousResearch/hermes-agent/pull/102382) (`optional-skills/linux-system-admin/hyprland-ui-testing`). This repo is the standalone copy so it can be installed without waiting on that PR.
+## Skills
 
-## Install (Hermes)
+| Skill | Category | Description |
+|---|---|---|
+| [hyprland-ui-testing](linux-system-admin/hyprland-ui-testing/SKILL.md) | linux-system-admin | Test Hyprland UI without disturbing active workspaces. |
+
+`hyprland-ui-testing` started as [NousResearch/hermes-agent#102382](https://github.com/NousResearch/hermes-agent/pull/102382). This repo is the standalone copy.
+
+## Install one skill
 
 ```bash
 mkdir -p ~/.hermes/skills/linux-system-admin
-git clone https://github.com/kvnloo/hyprland-ui-testing.git ~/.hermes/skills/linux-system-admin/hyprland-ui-testing
+git clone --depth 1 https://github.com/kvnloo/kvnloo-skills.git /tmp/kvnloo-skills
+cp -a /tmp/kvnloo-skills/linux-system-admin/hyprland-ui-testing ~/.hermes/skills/linux-system-admin/
 ```
 
-Or copy `SKILL.md` into `~/.hermes/profiles/<profile>/skills/linux-system-admin/hyprland-ui-testing/SKILL.md`.
-
-New sessions pick it up via `skill_view(name='hyprland-ui-testing')`.
+New sessions load it with `skill_view(name='hyprland-ui-testing')`.
 
 ## Tests
 
 ```bash
 pytest tests/ -q
 ```
-
-No live Hyprland required for contract tests.
 
 ## License
 
