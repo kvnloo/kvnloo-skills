@@ -7,6 +7,7 @@ Personal Hermes skills. Install a skill by copying its directory into `~/.hermes
 | Skill | Category | Description |
 |---|---|---|
 | [hyprland-ui-testing](linux-system-admin/hyprland-ui-testing/SKILL.md) | linux-system-admin | Test Hyprland UI without disturbing active workspaces. |
+| [abab-meta-research](research/abab-meta-research/SKILL.md) | research | Adaptive A/B/C research loop (strategy, evidence, experiment). |
 
 `hyprland-ui-testing` started as [NousResearch/hermes-agent#102382](https://github.com/NousResearch/hermes-agent/pull/102382). This repo is the standalone copy.
 
