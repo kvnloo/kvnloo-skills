@@ -13,6 +13,9 @@ metadata:
     category: linux-system-admin
     related_skills: [computer-use]
     requires_toolsets: [terminal]
+    env:
+      GUI_E2E_DISPLAY_SCRIPT: ~/.local/bin/gui-e2e-display.sh
+
 ---
 
 # Hyprland UI Testing Skill
@@ -28,6 +31,10 @@ Test graphical applications without mapping trial windows onto the user's active
 - An Ink/TUI or other terminal UI must run without mapping onto the user's focused workspace.
 
 Do not use this skill to automate ordinary desktop tasks. Use `computer-use` for background-first interaction with an existing application. Do not use Broadway or a headless output for Node/vitest unit tests that never open a window.
+
+**Headed E2E / TDD (mandatory):** any Playwright/Chromium/GTK/Electron window opened for tests must go through `$GUI_E2E_DISPLAY_SCRIPT` (default `~/.local/bin/gui-e2e-display.sh`; override with env; repo copy at `$DOTFILES_REPO/scripts/gui-e2e-display.sh`). That controller is the Hyprland testing harness: it refuses workspaces 1, 2, and OBS 8, never `focusmonitor`, never `movecursor`. GPU-headed (NVIDIA ANGLE, reject SwiftShader): `--tier hypr-headless --workspace 99 --output HERMES_UI_TEST --class HermesE2E-<digits>`. Non-GPU GUI: default `--tier xvfb`. Do not use `computer-use` or click_at_xy for e2e TDD — those move the user's cursor.
+
+
 
 ## Prerequisites
 
@@ -69,6 +76,8 @@ Run every shell command through `terminal`. Start long-lived servers and applica
 | Open Broadway display 5 | `browser_navigate(url="http://127.0.0.1:8085")` |
 | Capture Broadway render | `browser_vision()` |
 | TUI on headless output | `hyprctl dispatch exec '[workspace 99 silent; monitor HERMES_UI_TEST] kitty --title HERMES_TUI_E2E ...'` |
+| Headed GPU e2e TDD | `$GUI_E2E_DISPLAY_SCRIPT --tier hypr-headless --workspace 99 --output HERMES_UI_TEST --class HermesE2E-<digits> run -- CMD` |
+| Non-GPU GUI e2e | `$GUI_E2E_DISPLAY_SCRIPT --tier xvfb run -- CMD` |
 
 Broadway display `:N` normally listens on TCP port `8080 + N`; verify the server output rather than assuming the port is free.
 
@@ -170,6 +179,9 @@ Remove temporary runtime rules if the active configuration API made them persist
 - A TUI in kitty on a headless output is compositor isolation, not visual proof of Ink widgets.
 - `dispatch exec '[workspace N silent]'` alone can still steal focus; always re-read active workspace after map.
 - Auto-restart turns one crash into repeated focus-stealing map attempts; disable it during trials.
+- Never `hyprctl dispatch movecursor` or `focusmonitor`. Isolation must not move the user's pointer.
+- Never map e2e Chrome as class `google-chrome` (host rule sends it to workspace 2). Use `--ozone-platform=x11 --class=HermesE2E-<digits>`.
+- `computer-use` moves the cursor; it is not an e2e TDD lane.
 
 ## Verification
 

@@ -74,3 +74,7 @@ def test_tui_lane_is_not_broadway():
     assert "Do not start Broadway for them" in body
     assert "HERMES_TUI_E2E" in body
     assert "stolen-focus first frame is a failed isolation run" in body
+    assert "GUI_E2E_DISPLAY_SCRIPT" in body
+    assert "/workspace/.files/scripts/gui-e2e-display.sh" not in body
+    assert "gui-e2e-display.sh" in body
+    assert "movecursor" in body
