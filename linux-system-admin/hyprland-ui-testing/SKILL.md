@@ -130,7 +130,7 @@ hyprctl -j monitors
 
 Inspect the loaded Hyprland configuration and parser before installing a runtime rule. Legacy configurations accept `hyprctl keyword`; non-legacy or Lua configurations may require `hyprctl eval` and their configuration API. Do not retry a rejected legacy command with guessed syntax.
 
-Install the exact class/title placement rule before launching the app. The rule must assign the test client to the workspace on `HERMES_UI_TEST` without changing the user's focused monitor. Prove the rule is accepted, then launch the app once.
+Install the exact class/title placement rule before launching the app. The rule must assign the test client to the workspace on `HERMES_UI_TEST` **and set `no_initial_focus` before launch**. A silent workspace prevents a workspace switch; it does not independently prevent the new window from taking keyboard focus. Prove the full rule is accepted, then launch the app once.
 
 If `hyprctl dispatch exec '[workspace N silent]'` still steals focus, restore the recorded address immediately (`hyprctl dispatch workspace <id>` then `hyprctl dispatch focuswindow address:<addr>`), then retry with both `workspace 99 silent` and `monitor HERMES_UI_TEST` in the exec matcher. A stolen-focus first frame is a failed isolation run even if you restore afterward.
 
@@ -172,6 +172,7 @@ Remove temporary runtime rules if the active configuration API made them persist
 - `pin` means global workspace visibility, not stronger floating.
 - A silent workspace rule does not hide a pinned window.
 - Launch-then-move races the first mapped frame.
+- A silent workspace and `no_initial_focus` solve different problems; use both for headed isolation.
 - Window titles can change after map; GTK class values may differ from the requested application ID.
 - Layer-shell surfaces may be absent from `hyprctl clients`.
 - `hyprctl keyword` is not valid for every Hyprland configuration parser.

@@ -58,6 +58,8 @@ def test_workspace_isolation_safety_invariants_are_explicit():
     assert "Keep the test window unpinned" in body
     assert "pinning intentionally makes a window visible across workspaces" in body
     assert "active workspace and focused client match the recorded baseline" in body
+    assert "set `no_initial_focus` before launch" in body
+    assert "silent workspace and `no_initial_focus` solve different problems" in body.lower()
 
 
 def test_cleanup_covers_every_temporary_resource():
