@@ -10,7 +10,7 @@ From this checkout:
 python3 install.py --apply
 ```
 
-Review first with `python3 install.py --plan`. Limit either command with `--harness claude`, `codex`, `hermes-clean`, `hermes-chiefstaff`, or `agents`. Installation needs no harness settings changes. A fresh checkout contains only the two existing public skills; absent external sources are reported as `UNAVAILABLE` and skipped.
+Run it from the permanent checkout, because every link points into the directory that holds `install.py`. Review first with `python3 install.py --plan`. Limit either command with `--harness claude`, `codex`, `hermes-clean`, `hermes-chiefstaff`, or `agents`. Installation needs no harness settings changes. A harness whose own directory is absent is reported as `SKIP` and nothing is created for it. A fresh checkout contains only the two existing public skills; absent external sources are reported as `UNAVAILABLE` and skipped.
 
 | Harness | Default skill directory |
 | --- | --- |
@@ -21,7 +21,7 @@ Review first with `python3 install.py --plan`. Limit either command with `--harn
 
 Codex and agents are two names for the same destination, so a full apply creates each physical link once. The plan reports each harness separately and gives unique totals. Nothing is added to the legacy `.codex/skills` directory. Existing duplicates there remain for the later migration step.
 
-The installer reads `CLAUDE_CONFIG_DIR` and `HERMES_HOME` environment overrides without reading config files. `HOME` sets the home directory; an explicit `--home /tmp/skills-test-home` also ignores those harness overrides so tests cannot reach real directories. Hermes categorized skills keep their existing path and bare name. Duplicate paths for one Hermes name are reported as an error. The installer leaves `.usage.json` and curator archives untouched.
+The installer reads `CLAUDE_CONFIG_DIR` and `HERMES_HOME` environment overrides without reading config files. `HERMES_HOME` may name the Hermes root or one profile inside it (`<root>/profiles/<profile>`); both resolve to the same two profiles. `HOME` sets the home directory; an explicit `--home /tmp/skills-test-home` also ignores those harness overrides so tests cannot reach real directories. Hermes categorized skills keep their existing path and bare name. Duplicate paths for one Hermes name are reported as an error. A skill that a profile's curator has archived (`skills/.archive/<name>`) is reported as `ARCHIVED` and not linked again. The installer leaves `.usage.json` and curator archives untouched.
 
 ### Packs and private skills
 
@@ -32,9 +32,9 @@ python3 install.py --plan --pack desktop --pack creative
 python3 install.py --apply --pack pstack
 ```
 
-Available packs are `desktop`, `creative`, `personal`, `workstation`, `design`, `video`, `z0`, and `pstack`. A pack selects manifest entries; it does not fetch dependencies. `hyprland-ui-testing` stays in the flat tree but belongs to `desktop`. Its procedure has Hyprland assumptions. The maintained local focus-safety reference has a stricter Sway-only procedure; review which policy applies before using GUI skills.
+Available packs are `desktop`, `creative`, `workstation`, `design`, `video`, `z0`, and `pstack`. A pack selects manifest entries; it does not fetch dependencies. `hyprland-ui-testing` stays in the flat tree but belongs to `desktop`. Its procedure has Hyprland assumptions. The maintained local focus-safety reference has a stricter Sway-only procedure; review which policy applies before using GUI skills.
 
-The private overlay is a local directory, `~/.local/share/kvnloo-skills-private/skills/<name>/SKILL.md`. Include it explicitly with `--private`. It is never copied into this repository. Name collisions with the public manifest are refused. Omit the flag for credential-free cloud use.
+The private overlay is a local directory, `~/.local/share/kvnloo-skills-private/skills/<name>/SKILL.md`. Include it explicitly with `--private`. It is never copied into this repository. Name collisions with the public manifest are refused. An overlay entry may itself be a link to a skill kept elsewhere on the machine. Omit the flag for credential-free cloud use.
 
 ## Manifest schema
 
@@ -78,9 +78,9 @@ python3 install.py --status
 python3 install.py --uninstall
 ```
 
-Uninstall also accepts `--harness`. It restores original paths recorded in `~/.local/state/kvnloo-skills/links.json` and each `backup-<date>/manifest.json`. Real folders, ordinary files and foreign symlinks move into `backup-<date>/originals/` before replacement. Uninstall moves managed links into `removed-links/` and moves the originals back. Original bytes, permissions and internal symlinks survive. No displaced object is deleted. State files are atomically rewritten; empty directories created by installation remain.
+Uninstall also accepts `--harness`; without it every recorded link is restored, even if a harness directory has moved since. It restores original paths recorded in `~/.local/state/kvnloo-skills/links.json` and each `backup-<date>/manifest.json`. Real folders, ordinary files and foreign symlinks move into `backup-<date>/originals/` before replacement. Uninstall moves managed links into `removed-links/` and moves the originals back. Original bytes, permissions and internal symlinks survive. No displaced object is deleted. When the backup directory is on another filesystem, a move is a complete copy followed by removal of the source; a failed copy leaves the source in place and a `.partial` copy to inspect. A read-only skills directory makes apply fail before anything in it changes. State files are atomically rewritten; empty directories created by installation remain.
 
-A second apply is a no-op. Managed targets changed by the user are refused rather than replaced. Restore conflicts and missing original backups are errors. Do not edit or remove the backup manifests; keep them until you no longer need undo. Moving the checkout or changing a managed source requires uninstalling its existing links first.
+A second apply is a no-op. An interrupted apply can be resumed with `--apply` or undone with `--uninstall`. Managed targets changed by the user are refused rather than replaced. Restore conflicts and missing original backups are errors. Do not edit or remove the backup manifests; keep them until you no longer need undo. Moving the checkout or changing a managed source requires uninstalling its existing links first.
 
 ## Public safety and tests
 

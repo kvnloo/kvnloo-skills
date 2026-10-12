@@ -3,6 +3,7 @@
 import argparse
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import errno
 import fcntl
 import hashlib
 import json
@@ -36,6 +37,38 @@ def expand(path, home):
     return Path(path).absolute()
 
 
+def move(src, dst):
+    """Rename. Across filesystems, retire the source only after a complete copy."""
+    src, dst = Path(src), Path(dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.rename(src, dst)
+        return
+    except OSError as error:
+        # Any other failure (for example a read-only directory) changed nothing.
+        if error.errno != errno.EXDEV:
+            raise
+    folder = src.is_dir() and not src.is_symlink()
+    locked = [src.parent] + ([Path(d) for d, _, _ in os.walk(src)] if folder else [])
+    for directory in locked:
+        if not os.access(directory, os.W_OK | os.X_OK):
+            raise PermissionError(f'Cannot move out of read-only directory: {directory}')
+    partial = dst.with_name(dst.name + '.partial')
+    if exists(partial):
+        raise ValueError(f'Incomplete earlier copy; inspect it and move it away: {partial}')
+    if src.is_symlink():
+        os.symlink(os.readlink(src), partial)
+    elif folder:
+        shutil.copytree(src, partial, symlinks=True)
+    else:
+        shutil.copy2(src, partial)
+    os.rename(partial, dst)
+    if folder:
+        shutil.rmtree(src)
+    else:
+        src.unlink()
+
+
 def read_json(path, default):
     return json.loads(path.read_text()) if path.exists() else default
 
@@ -66,8 +99,12 @@ class Installer:
             if os.environ.get('CLAUDE_CONFIG_DIR'):
                 self.directories['claude'] = expand(os.environ['CLAUDE_CONFIG_DIR'], self.home) / 'skills'
             if os.environ.get('HERMES_HOME'):
+                # Inside a profile HERMES_HOME is <root>/profiles/<profile>.
+                hermes = expand(os.environ['HERMES_HOME'], self.home)
+                if hermes.parent.name == 'profiles':
+                    hermes = hermes.parent.parent
                 for h in ('hermes-clean', 'hermes-chiefstaff'):
-                    self.directories[h] = expand(os.environ['HERMES_HOME'], self.home) / 'profiles' / h[7:] / 'skills'
+                    self.directories[h] = hermes / 'profiles' / h[7:] / 'skills'
         self.selected = [args.harness] if args.harness else list(HARNESS_NAMES)
         self.state_dir = self.home / '.local/state/kvnloo-skills'
         self.state_path = self.state_dir / 'links.json'
@@ -146,6 +183,8 @@ class Installer:
         if harness.startswith('hermes-') and directory.is_dir():
             found = []
             for parent, dirs, files in os.walk(directory, followlinks=False):
+                if 'SKILL.md' in files:
+                    dirs[:] = []  # never look inside a skill's own folders
                 dirs[:] = [d for d in dirs if not d.startswith('.')]
                 for child in dirs:
                     candidate = Path(parent) / child
@@ -159,9 +198,17 @@ class Installer:
 
     def plan(self):
         operations = {}
-        totals = {h: {'links': 0, 'folders': 0, 'symlinks': 0, 'files': 0} for h in self.selected}
+        # A harness that is not installed is skipped; its directories are never invented.
+        active = []
+        for h in self.selected:
+            if self.directories[h].parent.is_dir():
+                active.append(h)
+            else:
+                print(f'SKIP [{h}] harness directory missing: {self.directories[h].parent}')
+        totals = {h: {'links': 0, 'folders': 0, 'symlinks': 0, 'files': 0} for h in active}
+        sources = set()
         for name, spec in self.skills():
-            relevant = [h for h in self.selected if h in spec['harnesses']]
+            relevant = [h for h in active if h in spec['harnesses']]
             if not relevant:
                 continue
             try:
@@ -171,7 +218,12 @@ class Installer:
             except (FileNotFoundError, ValueError) as error:
                 print(f'UNAVAILABLE {name}: {error}')
                 continue
+            sources.add(source)
             for h in relevant:
+                # Respect the Hermes curator: an archived skill stays archived.
+                if h.startswith('hermes-') and exists(self.directories[h] / '.archive' / name):
+                    print(f'ARCHIVED [{h}] {name}: left archived')
+                    continue
                 dest = self.destination(h, name)
                 if dest == source or (exists(dest) and dest.resolve() == source):
                     print(f'KEEP [{h}] {dest}')
@@ -194,6 +246,9 @@ class Installer:
                     operations[str(dest)]['harnesses'].append(h)
                 else:
                     operations[str(dest)] = {'target': str(source), 'harnesses': [h], 'kind': kind}
+        for dest, operation in operations.items():
+            if operation['kind'] == 'folder' and any(s.is_relative_to(dest) for s in sources):
+                raise ValueError(f'A skill source lives inside a folder that would be displaced: {dest}')
         for h, total in totals.items():
             print(f'TOTAL {h}: links={total["links"]} folders={total["folders"]} '
                   f'symlinks={total["symlinks"]} files={total["files"]}')
@@ -240,8 +295,7 @@ class Installer:
                         continue
                     if record['phase'] != 'prepared' or original is None or exists(original):
                         raise ValueError(f'Cannot displace changed path: {dest}')
-                    original.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.move(str(dest), str(original))
+                    move(dest, original)
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.symlink_to(record['target'], target_is_directory=True)
                 record['phase'] = 'linked'
@@ -249,14 +303,23 @@ class Installer:
             print(f'Applied {len(operations)} links')
 
     def uninstall(self):
+        # Without --harness every record is restored, wherever the harness lives now.
         selected_dirs = {self.directories[h].resolve() for h in self.selected}
         records = {d: r for d, r in self.state['links'].items()
-                   if any(Path(d).is_relative_to(directory) for directory in selected_dirs)}
+                   if not self.args.harness or
+                   any(Path(d).is_relative_to(directory) for directory in selected_dirs)}
         if not records:
             print('No changes')
             return
         # Preflight every restoration before moving anything.
+        def untouched(d, r):
+            # An apply that stopped before moving anything left nothing to restore.
+            return (r.get('phase') == 'prepared' and not matches(Path(d), r['target'])
+                    and not (r['original'] and exists(r['original'])))
+
         for d, r in records.items():
+            if untouched(d, r):
+                continue
             if exists(d) and not matches(Path(d), r['target']) and r.get('phase') != 'restoring':
                 raise ValueError(f'Refusing to replace user changes: {d}')
             if r['original'] and not exists(r['original']) and r.get('phase') != 'restoring':
@@ -268,6 +331,11 @@ class Installer:
                 dest = Path(d)
                 backup = Path(r['backup'])
                 retired = backup / 'removed-links' / hashlib.sha256(d.encode()).hexdigest()[:24]
+                if untouched(d, r):
+                    del self.state['links'][d]
+                    self.journal(backup, dest, dict(r, phase='abandoned'))
+                    print(f'UNCHANGED {dest}')
+                    continue
                 if r.get('phase') != 'restoring':
                     r['phase'] = 'restoring'
                     r['removed_link'] = str(retired)
@@ -276,13 +344,11 @@ class Installer:
                 if matches(dest, r['target']):
                     if exists(retired):
                         raise ValueError(f'Removed-link backup already exists: {retired}')
-                    retired.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.move(str(dest), str(retired))
+                    move(dest, retired)
                 if r['original'] and exists(r['original']):
                     if exists(dest):
                         raise ValueError(f'Restore destination occupied: {dest}')
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.move(r['original'], str(dest))
+                    move(r['original'], dest)
                 elif exists(dest) and not r['original']:
                     raise ValueError(f'Restore destination occupied: {dest}')
                 r['phase'] = 'restored'
