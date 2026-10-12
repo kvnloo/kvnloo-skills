@@ -2,3 +2,5 @@
 __pycache__/
 *.pyc
 .venv/
+.public-safe-patterns.local
+.lavish/

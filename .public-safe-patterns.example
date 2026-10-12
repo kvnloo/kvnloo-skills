@@ -1,0 +1,5 @@
+# Copy to .public-safe-patterns.local. One literal private identifier per line.
+# Replace these placeholders with machine names and private repository names.
+EXAMPLE_MACHINE_NAME
+EXAMPLE_PRIVATE_REPOSITORY
+EXAMPLE_TAILNET_NAME
