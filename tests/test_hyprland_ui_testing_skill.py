@@ -6,7 +6,7 @@ from pathlib import Path
 
 SKILL_MD = (
     Path(__file__).resolve().parents[1]
-    / "linux-system-admin"
+    / "skills"
     / "hyprland-ui-testing"
     / "SKILL.md"
 )

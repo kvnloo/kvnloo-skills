@@ -7,7 +7,7 @@ from pathlib import Path
 
 SKILL_MD = (
     Path(__file__).resolve().parents[1]
-    / "research"
+    / "skills"
     / "abab-meta-research"
     / "SKILL.md"
 )
