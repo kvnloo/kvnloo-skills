@@ -9,7 +9,6 @@ The machine inventory selects these skills. A local reference preserves the sour
 | `asd-ste100` | Local reference | Authorship is not established; preserve the installed source. |
 | `7dps` | Local reference | Owner-added is not authorship evidence; no public import. |
 | `fframes-video` | Local reference | Authorship is not established; no public import. |
-| `kevin-ste-gitops` | Local reference | Authorship is not established; project-specific history requires review. |
 | `focus-safe-desktop-automation` | Local reference | Agent-written; use the maintained Sway-only source without graduation. |
 | `sway-only-desktop-automation` | Local reference | Agent-written safety alias; remains local. |
 | `qmd` | Local reference | Tool-generated bootstrap; qmd owns its text. |
@@ -99,7 +98,6 @@ The machine inventory selects these skills. A local reference preserves the sour
 | `unslop` | Local reference | Third-party or unresolved loose authorship; opt-in pstack reference. |
 | `what-did-i-get-done` | Local reference | Third-party or unresolved loose authorship; opt-in pstack reference. |
 | `why` | Local reference | Third-party or unresolved loose authorship; opt-in pstack reference. |
-
 | `comfy-debug` | Local reference | Loose creative skill; authorship and commit provenance are not established. |
 | `blender-materials` | Local reference | Loose creative skill; authorship and commit provenance are not established. |
 | `blender-modeling` | Local reference | Loose creative skill; authorship and commit provenance are not established. |
@@ -108,6 +106,6 @@ The machine inventory selects these skills. A local reference preserves the sour
 
 ## Excluded from this migration
 
-Hermes bundled skills and agent-written project skills keep their existing lifecycle. Backup-only and archived skills are not reinstalled. Account-synced, plugin-managed, system skills and Cursor built-ins beyond the two requested review references remain harness-owned. The loose skill-doctor is deferred as recommended. Product adapters and marketplace-only product skills stay with their products; this installer does not edit settings or enable plugins.
+Hermes bundled skills and agent-written project skills keep their existing lifecycle. Backup-only and archived skills are not reinstalled. Account-synced, plugin-managed, system skills and Cursor built-ins beyond the two requested review references remain harness-owned. The loose skill-doctor is deferred as recommended. Personal working-method skills whose publication is undecided are not named here; link them through the private overlay. Product adapters and marketplace-only product skills stay with their products; this installer does not edit settings or enable plugins.
 
 Commit pins come from the offline inventory and repository map. Local copies may differ from those commits. The installer requires clean pinned checkouts in the declared source directories, reports absent or drifting checkouts, and fetches nothing. Pins for no-mistakes, the four design skills and the pstack family could not be established offline.

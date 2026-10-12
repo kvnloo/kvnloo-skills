@@ -76,12 +76,6 @@ harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
 pack = "creative"
 reason = "Authorship is not established; no public import."
 
-[skills.kevin-ste-gitops]
-source = "local:~/.omp/agent/managed-skills/kevin-ste-gitops"
-harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
-pack = "personal"
-reason = "Authorship is not established; project-specific history requires review."
-
 [skills.focus-safe-desktop-automation]
 source = "local:~/.omp/agent/managed-skills/focus-safe-desktop-automation"
 harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
