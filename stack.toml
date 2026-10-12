@@ -1,0 +1,737 @@
+# Offline inventory selection. Local references are not ownership claims.
+schema_version = 1
+
+[harnesses.claude]
+directory = "~/.claude-home/skills"
+
+[harnesses.codex]
+directory = "~/.agents/skills"
+
+[harnesses.hermes-clean]
+directory = "~/.hermes/profiles/clean/skills"
+
+[harnesses.hermes-chiefstaff]
+directory = "~/.hermes/profiles/chiefstaff/skills"
+
+[harnesses.agents]
+directory = "~/.agents/skills"
+
+[sources.agent-reach]
+repository = "https://github.com/kvnloo/Agent-Reach"
+commit = "e87bcdb17713c24513f6151d508f701b87dfd797"
+checkout = "~/.local/share/kvnloo-skills/sources/agent-reach"
+
+[sources.ctx]
+repository = "https://github.com/kvnloo/ctx"
+commit = "c13a92db70147533c256532384fe8baab6f87950"
+checkout = "~/.local/share/kvnloo-skills/sources/ctx"
+
+[sources.hyperframes]
+repository = "https://github.com/heygen-com/hyperframes"
+commit = "34552a21d20e688cfa7a62925c53dee9a2634eff"
+checkout = "~/.local/share/kvnloo-skills/sources/hyperframes"
+
+[sources.jev]
+repository = "https://github.com/kvnloo/hermes-jev-skills"
+commit = "412c35261986c5b70668fb9c59e0d1a761d63972"
+checkout = "~/.local/share/kvnloo-skills/sources/jev"
+
+[sources.frontier-kb]
+repository = "https://github.com/kvnloo/frontier-kb"
+commit = "22b4c0f1088abfef6184840cb79a0a6a6aceda44"
+checkout = "~/.local/share/kvnloo-skills/sources/frontier-kb"
+
+[sources.agentsview]
+repository = "https://github.com/kvnloo/agentsview"
+commit = "430b853c64ab5d5e4fdddf963883ebc4231bcb77"
+checkout = "~/.local/share/kvnloo-skills/sources/agentsview"
+
+[skills.abab-meta-research]
+source = "skills/abab-meta-research"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "default"
+reason = "Existing public collection skill."
+
+[skills.hyprland-ui-testing]
+source = "skills/hyprland-ui-testing"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "desktop"
+reason = "Existing public skill; compositor-specific."
+
+[skills.asd-ste100]
+source = "local:~/.agents/skills/asd-ste100"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "default"
+reason = "Authorship is not established; preserve the installed source."
+
+[skills.7dps]
+source = "local:~/.agents/skills/7dps"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "creative"
+reason = "Owner-added is not authorship evidence; no public import."
+
+[skills.fframes-video]
+source = "local:~/.claude-home/skills/fframes-video"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "creative"
+reason = "Authorship is not established; no public import."
+
+[skills.kevin-ste-gitops]
+source = "local:~/.omp/agent/managed-skills/kevin-ste-gitops"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "personal"
+reason = "Authorship is not established; project-specific history requires review."
+
+[skills.focus-safe-desktop-automation]
+source = "local:~/.omp/agent/managed-skills/focus-safe-desktop-automation"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "desktop"
+reason = "Agent-written; use the maintained Sway-only source without graduation."
+
+[skills.sway-only-desktop-automation]
+source = "local:~/.omp/agent/managed-skills/sway-only-desktop-automation"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "desktop"
+reason = "Agent-written safety alias; remains local."
+
+[skills.qmd]
+source = "local:~/.agents/skills/qmd"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "default"
+reason = "Tool-generated bootstrap; qmd owns its text."
+
+[skills.no-mistakes]
+source = "local:~/.agents/skills/no-mistakes"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "default"
+reason = "Third-party source; an installed skill commit was not established."
+
+[skills.agentsview-finding-history]
+source = "local:~/.agents/skills/agentsview-finding-history"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "workstation"
+reason = "Tool-generated; use agentsview skills install for updates."
+upstream = "agentsview"
+
+[skills.workspace-copilot]
+source = "local:~/.agents/skills/workspace-copilot"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "z0"
+reason = "Product-owned; retain its existing link, not a public copy."
+
+[skills.comfyui]
+source = "local:~/.hermes/profiles/chiefstaff/skills/creative/comfyui"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "creative"
+reason = "Hub-installed, differing copies; authorship and pin unresolved."
+
+[skills.review-security]
+source = "local:~/.cursor/skills-cursor/review-security"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "workstation"
+reason = "Cursor-owned built-in; requires cursor-agent."
+
+[skills.review-bugbot]
+source = "local:~/.cursor/skills-cursor/review-bugbot"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "workstation"
+reason = "Cursor-owned built-in; requires cursor-agent."
+
+[skills.agent-reach]
+source = "git:agent-reach:agent_reach/skill"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "default"
+reason = "Third-party public fork, pinned to the inventoried checkout."
+upstream = "agent-reach"
+
+[skills.ctx]
+source = "git:ctx:skills/ctx"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "default"
+reason = "Tool-owned public fork, pinned to the inventoried checkout."
+upstream = "ctx"
+
+[skills.hyperframes]
+source = "git:hyperframes:skills/hyperframes"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "video"
+reason = "Upstream skill; pinned public checkout, opt-in."
+upstream = "hyperframes"
+
+[skills.hyperframes-animation]
+source = "git:hyperframes:skills/hyperframes-animation"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "video"
+reason = "Upstream skill; pinned public checkout, opt-in."
+upstream = "hyperframes"
+
+[skills.hyperframes-audio]
+source = "git:hyperframes:skills/hyperframes-audio"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "video"
+reason = "Upstream skill; pinned public checkout, opt-in."
+upstream = "hyperframes"
+
+[skills.hyperframes-cli]
+source = "git:hyperframes:skills/hyperframes-cli"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "video"
+reason = "Upstream skill; pinned public checkout, opt-in."
+upstream = "hyperframes"
+
+[skills.hyperframes-core]
+source = "git:hyperframes:skills/hyperframes-core"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "video"
+reason = "Upstream skill; pinned public checkout, opt-in."
+upstream = "hyperframes"
+
+[skills.hyperframes-creative]
+source = "git:hyperframes:skills/hyperframes-creative"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "video"
+reason = "Upstream skill; pinned public checkout, opt-in."
+upstream = "hyperframes"
+
+[skills.hyperframes-keyframes]
+source = "git:hyperframes:skills/hyperframes-keyframes"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "video"
+reason = "Upstream skill; pinned public checkout, opt-in."
+upstream = "hyperframes"
+
+[skills.hyperframes-registry]
+source = "git:hyperframes:skills/hyperframes-registry"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "video"
+reason = "Upstream skill; pinned public checkout, opt-in."
+upstream = "hyperframes"
+
+[skills.media-use]
+source = "git:hyperframes:skills/media-use"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "video"
+reason = "Upstream skill; pinned public checkout, opt-in."
+upstream = "hyperframes"
+
+[skills.general-video]
+source = "git:hyperframes:skills/general-video"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "video"
+reason = "Upstream skill; pinned public checkout, opt-in."
+upstream = "hyperframes"
+
+[skills.motion-graphics]
+source = "git:hyperframes:skills/motion-graphics"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "video"
+reason = "Upstream skill; pinned public checkout, opt-in."
+upstream = "hyperframes"
+
+[skills.product-launch-video]
+source = "git:hyperframes:skills/product-launch-video"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "video"
+reason = "Upstream skill; pinned public checkout, opt-in."
+upstream = "hyperframes"
+
+[skills.jev-browser-use]
+source = "git:jev:skills/jev-browser-use"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "z0"
+reason = "Product-owned Jev skill; pinned checkout, retain bare name."
+upstream = "jev"
+
+[skills.jev-compaction]
+source = "git:jev:skills/jev-compaction"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "z0"
+reason = "Product-owned Jev skill; pinned checkout, retain bare name."
+upstream = "jev"
+
+[skills.jev-computer-use]
+source = "git:jev:skills/jev-computer-use"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "z0"
+reason = "Product-owned Jev skill; pinned checkout, retain bare name."
+upstream = "jev"
+
+[skills.jev-frontier-work]
+source = "git:jev:skills/jev-frontier-work"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "z0"
+reason = "Product-owned Jev skill; pinned checkout, retain bare name."
+upstream = "jev"
+
+[skills.jev-mailbox]
+source = "git:jev:skills/jev-mailbox"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "z0"
+reason = "Product-owned Jev skill; pinned checkout, retain bare name."
+upstream = "jev"
+
+[skills.jev-memory]
+source = "git:jev:skills/jev-memory"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "z0"
+reason = "Product-owned Jev skill; pinned checkout, retain bare name."
+upstream = "jev"
+
+[skills.jev-model-routing]
+source = "git:jev:skills/jev-model-routing"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "z0"
+reason = "Product-owned Jev skill; pinned checkout, retain bare name."
+upstream = "jev"
+
+[skills.jev-setup]
+source = "git:jev:skills/jev-setup"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "z0"
+reason = "Product-owned Jev skill; pinned checkout, retain bare name."
+upstream = "jev"
+
+[skills.jev-skill-select]
+source = "git:jev:skills/jev-skill-select"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "z0"
+reason = "Product-owned Jev skill; pinned checkout, retain bare name."
+upstream = "jev"
+
+[skills.frontier-kb]
+source = "git:frontier-kb:skills/frontier-kb"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "z0"
+reason = "Product-owned skill; pinned public checkout."
+upstream = "frontier-kb"
+
+[skills.design-taste-frontend]
+source = "local:~/.hermes/profiles/clean/skills/design-taste-frontend"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "design"
+reason = "Third-party hub skill; commit provenance was not established."
+
+[skills.high-end-visual-design]
+source = "local:~/.hermes/profiles/clean/skills/high-end-visual-design"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "design"
+reason = "Third-party hub skill; commit provenance was not established."
+
+[skills.minimalist-ui]
+source = "local:~/.hermes/profiles/clean/skills/minimalist-ui"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "design"
+reason = "Third-party hub skill; commit provenance was not established."
+
+[skills.redesign-existing-projects]
+source = "local:~/.hermes/profiles/clean/skills/redesign-existing-projects"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "design"
+reason = "Third-party hub skill; commit provenance was not established."
+
+[skills.architect]
+source = "local:~/.codex/skills/architect"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.arena]
+source = "local:~/.codex/skills/arena"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.automate-me]
+source = "local:~/.codex/skills/automate-me"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.babysit]
+source = "local:~/.codex/skills/babysit"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.blast-radius]
+source = "local:~/.codex/skills/blast-radius"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.bro]
+source = "local:~/.codex/skills/bro"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.create-verification-skill]
+source = "local:~/.codex/skills/create-verification-skill"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.deslop]
+source = "local:~/.codex/skills/deslop"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.figure-it-out]
+source = "local:~/.codex/skills/figure-it-out"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.fix-ci]
+source = "local:~/.codex/skills/fix-ci"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.fix-merge-conflicts]
+source = "local:~/.codex/skills/fix-merge-conflicts"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.get-pr-comments]
+source = "local:~/.codex/skills/get-pr-comments"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.how]
+source = "local:~/.codex/skills/how"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.interrogate]
+source = "local:~/.codex/skills/interrogate"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.maintain-verification-skill]
+source = "local:~/.codex/skills/maintain-verification-skill"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.make-pr-easy-to-review]
+source = "local:~/.codex/skills/make-pr-easy-to-review"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.no-comments]
+source = "local:~/.codex/skills/no-comments"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.poteto-mode]
+source = "local:~/.codex/skills/poteto-mode"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-boundary-discipline]
+source = "local:~/.codex/skills/principle-boundary-discipline"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-build-the-lever]
+source = "local:~/.codex/skills/principle-build-the-lever"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-encode-lessons-in-structure]
+source = "local:~/.codex/skills/principle-encode-lessons-in-structure"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-exhaust-the-design-space]
+source = "local:~/.codex/skills/principle-exhaust-the-design-space"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-experience-first]
+source = "local:~/.codex/skills/principle-experience-first"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-fix-root-causes]
+source = "local:~/.codex/skills/principle-fix-root-causes"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-foundational-thinking]
+source = "local:~/.codex/skills/principle-foundational-thinking"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-guard-the-context-window]
+source = "local:~/.codex/skills/principle-guard-the-context-window"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-laziness-protocol]
+source = "local:~/.codex/skills/principle-laziness-protocol"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-make-operations-idempotent]
+source = "local:~/.codex/skills/principle-make-operations-idempotent"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-migrate-callers-then-delete-legacy-apis]
+source = "local:~/.codex/skills/principle-migrate-callers-then-delete-legacy-apis"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-minimize-reader-load]
+source = "local:~/.codex/skills/principle-minimize-reader-load"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-model-the-domain]
+source = "local:~/.codex/skills/principle-model-the-domain"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-never-block-on-the-human]
+source = "local:~/.codex/skills/principle-never-block-on-the-human"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-outcome-oriented-execution]
+source = "local:~/.codex/skills/principle-outcome-oriented-execution"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-prove-it-works]
+source = "local:~/.codex/skills/principle-prove-it-works"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-redesign-from-first-principles]
+source = "local:~/.codex/skills/principle-redesign-from-first-principles"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-separate-before-serializing-shared-state]
+source = "local:~/.codex/skills/principle-separate-before-serializing-shared-state"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-sequence-verifiable-units]
+source = "local:~/.codex/skills/principle-sequence-verifiable-units"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-subtract-before-you-add]
+source = "local:~/.codex/skills/principle-subtract-before-you-add"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.principle-type-system-discipline]
+source = "local:~/.codex/skills/principle-type-system-discipline"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.recall]
+source = "local:~/.codex/skills/recall"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.reflect]
+source = "local:~/.codex/skills/reflect"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.setup-pstack]
+source = "local:~/.codex/skills/setup-pstack"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.show-me-your-work]
+source = "local:~/.codex/skills/show-me-your-work"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.swarm]
+source = "local:~/.codex/skills/swarm"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.tdd]
+source = "local:~/.codex/skills/tdd"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.teach]
+source = "local:~/.codex/skills/teach"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.technical-writing]
+source = "local:~/.codex/skills/technical-writing"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.thermo-nuclear-code-quality-review]
+source = "local:~/.codex/skills/thermo-nuclear-code-quality-review"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.typescript-best-practices]
+source = "local:~/.codex/skills/typescript-best-practices"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.unslop]
+source = "local:~/.codex/skills/unslop"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.what-did-i-get-done]
+source = "local:~/.codex/skills/what-did-i-get-done"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.why]
+source = "local:~/.codex/skills/why"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "pstack"
+reason = "Third-party or unresolved loose authorship; opt-in pstack reference."
+
+[skills.comfy-debug]
+source = "local:~/.codex/skills/comfy-debug"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "creative"
+reason = "Loose creative skill; authorship and commit provenance are not established."
+
+[skills.blender-materials]
+source = "local:~/.codex/skills/blender-materials"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "creative"
+reason = "Loose creative skill; authorship and commit provenance are not established."
+
+[skills.blender-modeling]
+source = "local:~/.codex/skills/blender-modeling"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "creative"
+reason = "Loose creative skill; authorship and commit provenance are not established."
+
+[skills.ffmpeg]
+source = "local:~/.codex/skills/ffmpeg"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "creative"
+reason = "Loose creative skill; authorship and commit provenance are not established."
+
+[skills.tencent-hunyuan3d]
+source = "local:~/.codex/skills/tencent-hunyuan3d"
+harnesses = ["claude", "codex", "hermes-clean", "hermes-chiefstaff", "agents"]
+pack = "creative"
+reason = "Loose creative skill; authorship and commit provenance are not established."
+
+[tools.qmd]
+version = "2.8.3"
+check = "qmd --version"
+install = "npm install -g --prefix ~/.local @tobilu/qmd@2.8.3; then qmd skill show"
+
+[tools.fff]
+version = "0.11.0"
+check = "python3 -m pip show fff-search"
+install = "No standalone CLI or skill. fff-search==0.11.0 arrives when z0intelligence is installed."
+
+[tools.ctx]
+version = "2.2.7-reviewed"
+check = "ctx --version"
+install = "Install the ctxrs/ctx 2.2.7 release for the target OS; checksum verification remains required."
+
+[tools.agent-reach]
+version = "commit:e87bcdb17713c24513f6151d508f701b87dfd797"
+check = "agent-reach --version"
+install = "uv tool install git+https://github.com/kvnloo/Agent-Reach.git@e87bcdb17713c24513f6151d508f701b87dfd797"
+
+[tools.agentsview]
+version = "commit:430b853c64ab5d5e4fdddf963883ebc4231bcb77"
+check = "agentsview --version"
+install = "Use the agentsview repository installer at the recorded commit; then agentsview skills install."
+
+[tools.jev]
+version = "commit:412c35261986c5b70668fb9c59e0d1a761d63972"
+check = "jev --help"
+install = "Run python3 install.py in the pinned hermes-jev-skills checkout; no key is read by this collection."
+
+[tools.no-mistakes]
+version = "unresolved"
+check = "Skill only; no standalone binary established"
+install = "Keep the local skill reference until upstream commit provenance is confirmed."
+
+[tools.yt-dlp]
+version = "os-package"
+check = "yt-dlp --version"
+install = "apt install yt-dlp OR pacman -S yt-dlp; installed version must be recorded on the target machine."
+
+[tools.mcporter]
+version = "0.12.3"
+check = "mcporter --version"
+install = "npm install -g --prefix ~/.local mcporter@0.12.3"
+
+[tools.gh]
+version = "os-package"
+check = "gh --version"
+install = "apt install gh OR pacman -S github-cli"
+
+[tools.jq]
+version = "os-package"
+check = "jq --version"
+install = "apt install jq OR pacman -S jq"
+
+[tools.rg]
+version = "os-package"
+check = "rg --version"
+install = "apt install ripgrep OR pacman -S ripgrep"
+
+[tools.ffmpeg]
+version = "os-package"
+check = "ffmpeg -version"
+install = "apt install ffmpeg OR pacman -S ffmpeg"
