@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check tracked working-tree bytes and names without exposing matched values."""
 import argparse
+from collections import deque
 import os
 import posixpath
 from pathlib import Path
@@ -108,13 +109,28 @@ def check_history(root, refs, patterns):
         oid = git('rev-parse', '--verify', '--end-of-options', ref).strip()
         if not re.fullmatch(rb'[0-9a-f]{40}|[0-9a-f]{64}', oid):
             raise ValueError('invalid object id')
-        pending.append((oid.decode('ascii'), 'root', ''))
+        pending.append((oid.decode('ascii'), 'root', '', ''))
 
     cache = {}
     expanded = set()
     findings = []
     total_bytes = 0
     entries = 0
+    scheduled = len(pending)
+
+    def charge(size):
+        nonlocal total_bytes
+        if total_bytes + size > MAX_HISTORY_BYTES:
+            raise ValueError('history memory limit')
+        total_bytes += size
+
+    def schedule(oid, expected, path, tree_root):
+        nonlocal scheduled
+        scheduled += 1
+        if scheduled > MAX_HISTORY_ENTRIES:
+            raise ValueError('history entry limit')
+        charge(sys.getsizeof(path) + 256)
+        pending.append((oid, expected, path, tree_root))
 
     def object_data(oid):
         nonlocal total_bytes
@@ -146,6 +162,61 @@ def check_history(root, refs, patterns):
         cache[oid] = (kind, data)
         return kind, data
 
+    def tree_entries(oid):
+        kind, data = object_data(oid)
+        if kind != 'tree':
+            raise ValueError('invalid tree')
+        offset = 0
+        oid_bytes = len(oid) // 2
+        while offset < len(data):
+            space = data.find(b' ', offset)
+            nul = data.find(b'\0', space + 1) if space >= 0 else -1
+            if space < 0 or nul < 0 or nul + 1 + oid_bytes > len(data):
+                raise ValueError('invalid tree')
+            mode = data[offset:space]
+            name = data[space + 1:nul]
+            if not name or b'/' in name or name in (b'.', b'..'):
+                raise ValueError('invalid tree name')
+            yield mode, name.decode('utf-8', errors='surrogateescape'), data[nul + 1:nul + 1 + oid_bytes].hex()
+            offset = nul + 1 + oid_bytes
+
+    def symlink_escapes(tree_root, path):
+        resolved = []
+        remaining = deque()
+        followed = 0
+
+        def prepend(value):
+            charge(sys.getsizeof(value) + 64 * (value.count('/') + 1))
+            remaining.extendleft(reversed(value.split('/')))
+
+        prepend(path)
+        while remaining:
+            part = remaining.popleft()
+            if part in ('', '.'):
+                continue
+            if part == '..':
+                if not resolved:
+                    return True
+                resolved.pop()
+                continue
+            directory = resolved[-1][1] if resolved else tree_root
+            entry = next((item for item in tree_entries(directory) if item[1] == part), None) if directory else None
+            if entry and entry[0] == b'120000':
+                followed += 1
+                if followed > 40:
+                    raise ValueError('unresolvable symlink chain')
+                kind, target = object_data(entry[2])
+                if kind != 'blob' or not target or b'\0' in target:
+                    raise ValueError('invalid symlink')
+                target_text = target.decode('utf-8', errors='surrogateescape')
+                if posixpath.isabs(target_text):
+                    return True
+                prepend(target_text)
+            else:
+                child_tree = entry[2] if entry and entry[0] in (b'40000', b'040000') else None
+                resolved.append((part, child_tree))
+        return False
+
     def scan(oid, location, value):
         for category, pattern in patterns:
             line = 1
@@ -158,7 +229,7 @@ def check_history(root, refs, patterns):
                 findings.append((oid, location, line, category))
 
     while pending:
-        oid, expected, path = pending.pop()
+        oid, expected, path, tree_root = pending.pop()
         entries += 1
         if entries > MAX_HISTORY_ENTRIES:
             raise ValueError('history entry limit')
@@ -171,24 +242,13 @@ def check_history(root, refs, patterns):
 
         # Paths must be checked for each tree occurrence, even when its object
         # was seen elsewhere. Other object contents can be checked once.
-        key = (oid, path) if kind == 'tree' else (oid, '')
+        key = (oid, path, tree_root) if kind == 'tree' else (oid, '')
         if key in expanded:
             continue
         expanded.add(key)
         if kind == 'tree':
-            offset = 0
-            oid_bytes = len(oid) // 2
-            while offset < len(data):
-                space = data.find(b' ', offset)
-                nul = data.find(b'\0', space + 1) if space >= 0 else -1
-                if space < 0 or nul < 0 or nul + 1 + oid_bytes > len(data):
-                    raise ValueError('invalid tree')
-                mode = data[offset:space]
-                name = data[space + 1:nul]
-                if not name or b'/' in name or name in (b'.', b'..'):
-                    raise ValueError('invalid tree name')
-                child_path = posixpath.join(path, name.decode('utf-8', errors='replace'))
-                child_oid = data[nul + 1:nul + 1 + oid_bytes].hex()
+            for mode, name, child_oid in tree_entries(oid):
+                child_path = posixpath.join(path, name)
                 scan(oid, 'path', child_path)
                 if child_path == '.public-safe-patterns.local':
                     findings.append((oid, 'path', 0, 'local patterns file is tracked'))
@@ -198,16 +258,9 @@ def check_history(root, refs, patterns):
                     child_kind = 'blob'
                 else:
                     raise ValueError('unsupported tree entry')
-                if mode == b'120000':
-                    target_kind, target = object_data(child_oid)
-                    if target_kind != 'blob':
-                        raise ValueError('invalid symlink')
-                    target_text = target.decode('utf-8', errors='replace')
-                    resolved = posixpath.normpath(posixpath.join(posixpath.dirname(child_path), target_text))
-                    if posixpath.isabs(target_text) or resolved == '..' or resolved.startswith('../'):
-                        findings.append((child_oid, 'symlink', 0, 'symlink target outside repository'))
-                pending.append((child_oid, child_kind, child_path))
-                offset = nul + 1 + oid_bytes
+                schedule(child_oid, child_kind, child_path, tree_root)
+                if mode == b'120000' and symlink_escapes(tree_root, child_path):
+                    findings.append((child_oid, 'symlink', 0, 'symlink target outside repository'))
         elif kind == 'blob':
             scan(oid, 'content', data.decode('utf-8', errors='replace'))
         else:
@@ -231,7 +284,8 @@ def check_history(root, refs, patterns):
             for linked, linked_kind in links:
                 if not re.fullmatch(rb'[0-9a-f]{' + str(len(oid)).encode() + rb'}', linked):
                     raise ValueError('invalid object link')
-                pending.append((linked.decode('ascii'), linked_kind, ''))
+                linked_oid = linked.decode('ascii')
+                schedule(linked_oid, linked_kind, '', linked_oid if linked_kind == 'tree' else '')
 
     for oid, location, line, category in findings:
         print(f'FAIL object {oid} {location}:{line}: {category}')

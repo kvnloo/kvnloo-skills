@@ -102,6 +102,8 @@ Copy `.public-safe-patterns.example` to the gitignored `.public-safe-patterns.lo
 
 Without `--history`, the checker only examines the current tracked working tree. `--history HEAD` also checks the objects reachable from HEAD, including removed contents, historical paths, symlink targets, commit metadata and messages, and annotated tag metadata when a tag is specified. Repeat `--history REF` to include other exact commit or tag refs; unselected refs are not checked. Incomplete or shallow history and unreadable objects fail closed. Exit status 0 means no findings, 1 means findings, and 2 means an error. The checker is a publication guard, not proof of authorship, permission to publish, or detection of every secret format. A clean result does not lift the publication hold.
 
+Historical symlinks resolve against each commit's tree, never the host filesystem. Escaping chains are findings; cycles or chains longer than 40 links fail closed. Scans reject objects larger than 16 MiB, more than one million scheduled entries, or a 512 MiB accounting budget that includes object bytes, expanded paths and symlink-resolution work. The budget is conservative accounting, not an operating-system RSS limit.
+
 Tests use temporary fake homes and repositories. CI runs the stdlib suite, public check and a fake-home plan on Python 3.11 and 3.13. The executable ABAB state tests are included in the unittest runner. Prose substring and heading-order assertions are not behavioral evidence and are not part of the suite.
 
 ## Defaults Kevin can change

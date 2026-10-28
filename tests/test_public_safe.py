@@ -146,6 +146,79 @@ class PublicSafeHistoryTests(unittest.TestCase):
         self.commit('Remove link')
         self.assert_finding(self.scan('HEAD'), value, blob)
 
+    def test_removed_symlink_chain_cannot_escape_historical_tree(self):
+        (self.root / 'dir').mkdir()
+        (self.root / 'x').mkdir()
+        (self.root / 'x' / 'file').write_text('Portable')
+        (self.root / 'dir' / 's').symlink_to('../x')
+        (self.root / 'link').symlink_to('dir/s/../..')
+        self.commit()
+        blob = self.git('rev-parse', 'HEAD:link')
+        (self.root / 'link').unlink()
+        (self.root / 'dir' / 's').unlink()
+        self.commit('Remove links')
+        result = self.scan('HEAD')
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn(blob, result.stdout)
+        self.assertIn('symlink target outside repository', result.stdout)
+
+    def test_shared_subtree_links_use_each_commit_root(self):
+        (self.root / 'dir').mkdir()
+        (self.root / 'x').mkdir()
+        (self.root / 'x' / 'file').write_text('Portable')
+        (self.root / 'long').mkdir()
+        (self.root / 'long' / 'alias').symlink_to('../x')
+        (self.root / 'dir' / 'link').symlink_to('../long/alias/../..')
+        self.commit()
+        (self.root / 'long' / 'alias').unlink()
+        (self.root / 'long' / 'alias').symlink_to('../x/nested')
+        (self.root / 'x' / 'nested').mkdir()
+        (self.root / 'x' / 'nested' / 'file').write_text('Portable')
+        self.commit('Safe later link')
+        result = self.scan('HEAD')
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('symlink target outside repository', result.stdout)
+
+    def test_safe_historical_symlink_chain_passes(self):
+        (self.root / 'dir').mkdir()
+        (self.root / 'x' / 'nested').mkdir(parents=True)
+        (self.root / 'x' / 'nested' / 'file').write_text('Portable')
+        (self.root / 'dir' / 's').symlink_to('../x/nested')
+        (self.root / 'link').symlink_to('dir/s/../..')
+        self.commit()
+        result = self.scan('HEAD')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_removed_symlink_cycle_is_error(self):
+        (self.root / 'a').symlink_to('b')
+        (self.root / 'b').symlink_to('a')
+        self.commit()
+        (self.root / 'a').unlink()
+        (self.root / 'b').unlink()
+        self.commit('Remove cycle')
+        result = self.scan('HEAD')
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+
+    def test_expanded_history_paths_count_toward_resource_budget(self):
+        tree = self.git('mktree')
+        for level in range(6):
+            entries = ''.join(f'040000 tree {tree}\t{letter * 100}\n' for letter in 'ab')
+            tree = subprocess.run(['git', '-C', str(self.root), 'mktree'],
+                                  input=entries, capture_output=True, text=True,
+                                  check=True, env=self.env).stdout.strip()
+        commit = self.git('commit-tree', tree, '-m', 'Shared tree fixture')
+        code = (
+            'import runpy,sys; '
+            'module=runpy.run_path(sys.argv[1]); '
+            'module["main"].__globals__["MAX_HISTORY_BYTES"]=5000; '
+            'sys.argv=[sys.argv[1],"--root",sys.argv[2],"--history",sys.argv[3]]; '
+            'sys.exit(module["main"]())'
+        )
+        result = subprocess.run(['python3', '-c', code, str(CHECKER), str(self.root), commit],
+                                capture_output=True, text=True, env=self.env)
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn('ERROR', result.stderr)
+
     def test_commit_message_and_author_metadata_are_checked(self):
         message_value = 'sk-' + 'C' * 40
         message_commit = self.commit('Fixture ' + message_value)
