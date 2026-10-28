@@ -73,6 +73,10 @@ def run_readonly(role: str, with_scroll: bool) -> None:
     try:
         ph = phone.Phone(role, lock_wait=180)
         ph.__enter__()
+    except OwnerBusy as e:
+        # connect() checks the owner over adb before uiautomator starts: nothing was touched.
+        check("take lock and connect", "skip", f"owner busy before uiautomator started: {e}")
+        return
     except Exception as e:  # noqa: BLE001
         check("take lock and connect", "fail", f"{type(e).__name__}: {e}")
         return

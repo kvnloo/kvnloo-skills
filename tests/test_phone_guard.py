@@ -45,6 +45,28 @@ BLOCKED = [
     "content insert --uri content://settings/secure --bind name:s:x",
     "am force-stop app.dash.mobile",
     "p\"\"m install /sdcard/a.apk",
+    # path-qualified binaries are the same commands
+    "/system/bin/pm install /sdcard/a.apk",
+    "/system/bin/ime set com.example/.Keyboard",
+    "/system/bin/settings put secure default_input_method com.example/.Keyboard",
+    "/system/bin/cmd package install-existing com.example.app",
+    # other ways to stop a protected package or change settings and permissions
+    "cmd activity force-stop app.dash.mobile",
+    "cmd activity kill-all",
+    "am stop-app app.dash.mobile",
+    "am kill-all",
+    "setprop persist.sys.locale en-US",
+    "device_config put a b c",
+    "cmd device_config delete a b",
+    "appops set com.example.app CAMERA allow",
+    "cmd appops reset com.example.app",
+    "cmd role add-role-holder android.app.role.HOME com.example.app",
+    "cmd overlay enable com.example.overlay",
+    "cmd wifi set-wifi-enabled disabled",
+    "cmd bluetooth_manager disable",
+    "cmd connectivity airplane-mode enable",
+    "cmd lock_settings set-pin 1234",
+    "service call input_method 1",
 ]
 ALLOWED = [
     "cat /proc/uptime",
@@ -65,6 +87,12 @@ ALLOWED = [
     "input keyevent WAKEUP",
     "dumpsys telephony.registry",
     "screencap -p",
+    "cmd activity force-stop com.example.app",
+    "cmd connectivity airplane-mode",
+    "device_config get a b",
+    "service list",
+    "/system/bin/getprop ro.serialno",
+    "content query --uri content://settings/secure --where name=default_input_method",
 ]
 
 
@@ -103,9 +131,54 @@ def test_protected_packages_extend_but_never_shrink(monkeypatch):
     (["adb", "-s", "X", "shell", "getprop", "ro.serialno"], False),
     (["adb", "-P", "1", "shell", "cmd package resolve-activity --brief"], False),
     (["ls", "-l"], False),
+    (["adb", "abb", "package", "install-create"], True),
+    (["adb", "kill-server"], True),
+    (["adb", "-s", "X", "abb_exec", "input_method", "set", "x"], True),
 ])
 def test_adb_argv_policy(argv, blocked):
     assert bool(guard.explain_adb_argv(argv)) is blocked
+
+
+@pytest.mark.parametrize("argv,blocked", [
+    (["bash", "-c", "adb install a.apk"], True),
+    (["/bin/sh", "-lc", "cd /x && ~/sdk/platform-tools/adb -s X uninstall com.example.app"], True),
+    (["timeout", "5", "adb", "install", "a.apk"], True),
+    (["env", "A=1", "nice", "-n", "5", "/opt/sdk/platform-tools/adb", "shell", "ime", "set", "x"], True),
+    (["flock", "-w", "120", "/tmp/s22-ui.lock", "-c", "adb shell settings put global a 1"], True),
+    (["flock", "/tmp/s22-ui.lock", "adb", "shell", "getprop", "ro.serialno"], False),
+    (["bash", "-c", "adb devices -l"], False),
+    (["git", "commit", "-m", "adb install docs"], False),       # not a command runner
+    (["grep", "-r", "adb", "install"], False),
+])
+def test_subprocess_argv_through_shells_and_wrappers(argv, blocked):
+    if blocked:
+        with pytest.raises(PhoneGuardError):
+            guard._check_popen(argv, False)
+    else:
+        guard._check_popen(argv, False)
+
+
+@pytest.mark.parametrize("svc,blocked", [
+    ("shell:pm install /sdcard/a.apk", True),
+    ("shell,v2:/system/bin/ime set com.example/.K", True),
+    ("shell,v2,raw:settings put global a 1", True),
+    ("exec:cmd package install -S 123", True),
+    ("abb_exec:package\0install-create", True),
+    ("abb:input_method\0set\0x", True),
+    ("reboot:", True),
+    ("root:", True),
+    ("tcpip:5555", True),
+    ("host:pair:123456:host", True),
+    ("host:kill", True),
+    ("shell:getprop ro.serialno", False),
+    ("shell,v2:dumpsys power", False),
+    ("host:devices-l", False),
+    ("host:tport:serial:X", False),
+    ("sync:", False),
+    ("tcp:9008", False),
+])
+def test_wire_protocol_service_policy(svc, blocked):
+    assert bool(guard.explain_service(svc)) is blocked, svc
 
 
 def test_subprocess_and_os_system_are_guarded(tmp_path):
@@ -182,6 +255,68 @@ def test_uiautomator2_clipboard_rpc_is_guarded():
     for method in ("setClipboard", "getClipboard", "pasteClipboard"):
         with pytest.raises(PhoneGuardError):
             u2.Device.jsonrpc_call(d, method, ["a", "b"])
+
+
+def test_uiautomator2_rotation_and_raw_rpc_are_guarded():
+    u2 = pytest.importorskip("uiautomator2")
+    import uiautomator2.core as core
+    d = _bare(u2.Device)
+    for call in (lambda: d.freeze_rotation(True), lambda: d.set_orientation("left"),
+                 lambda: u2.Device.jsonrpc_call(d, "setOrientation", ["left"]),
+                 lambda: u2.Device.jsonrpc_call(d, "freezeRotation", [True])):
+        with pytest.raises(PhoneGuardError):
+            call()
+    # the module-level helper under jsonrpc_call cannot reach these RPCs either
+    for method in ("setClipboard", "getClipboard", "freezeRotation"):
+        with pytest.raises(PhoneGuardError):
+            core._jsonrpc_call(None, 0, method, ["a"], 1, False)
+
+
+def test_adbutils_wire_level_shell_cannot_skip_the_policy():
+    adbutils = pytest.importorskip("adbutils")
+    from adbutils._adb import AdbConnection
+    sent = []
+
+    class Conn:
+        def send_command(self, cmd):
+            sent.append(cmd)
+
+        def check_okay(self):
+            raise EOFError("test transport")
+
+        def close(self):
+            pass
+
+    conn = _bare(AdbConnection)
+    for cmd in ("shell:pm install /sdcard/a.apk", "shell,v2:ime set x/.K", "exec:cmd package install",
+                "abb_exec:package\0install"):
+        with pytest.raises(PhoneGuardError):
+            conn.send_command(cmd)
+    dev = _bare(adbutils.AdbDevice)
+    with pytest.raises(PhoneGuardError):
+        dev._shell_v2("pm install /sdcard/a.apk")
+    dev.open_transport = lambda *a, **k: Conn()
+    with pytest.raises(EOFError):                       # a read-only command still goes through
+        dev._shell_v2("getprop ro.serialno")
+    assert sent == ["shell,v2:getprop ro.serialno"]
+
+
+def test_a_newer_guard_wraps_an_older_copys_checks():
+    class Dev:
+        def shell(self, cmd):
+            return "ran"
+    inner = Dev.shell
+
+    def older(self, cmd):            # what guard version 1 left behind: a weaker check
+        return inner(self, cmd)
+    older.__phone_guard__ = True
+    Dev.shell = older
+    guard._guard_shell_method(Dev, "shell")
+    with pytest.raises(PhoneGuardError):
+        Dev().shell("/system/bin/pm install a.apk")
+    assert Dev().shell("getprop x") == "ran"
+    guard._guard_shell_method(Dev, "shell")             # idempotent for the current version
+    assert Dev.shell.__wrapped__ is older
 
 
 def test_adbutils_device_is_guarded():

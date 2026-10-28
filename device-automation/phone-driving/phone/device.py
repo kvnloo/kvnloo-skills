@@ -99,12 +99,16 @@ class Phone:
         self.d = None
 
     def connect(self):
-        """Discover the transport, prove the lock, connect uiautomator2, probe the hierarchy RPC."""
+        """Prove the lock, discover the transport, check the owner over adb, and only then start
+        uiautomator2 and probe the hierarchy RPC. As in the production launcher, a busy owner means
+        the instrumentation is never started and their screen is never dumped (raises OwnerBusy).
+        An explicit `serial` is used only after proving it is this role's phone."""
         lockmod.require_ui_lock(self.role)
         if self._serial_override:
-            self.transport = adbmod.Transport(self._serial_override, self._serial_override, "usb")
+            self.transport = adbmod.prove(self.role, self._serial_override)
         else:
             self.transport = adbmod.discover(self.role)
+        self.require_idle()
         import adbutils
         import uiautomator2 as u2
         client = adbutils.AdbClient(host="localhost", port=int(config.adb_port()))
@@ -166,14 +170,21 @@ class Phone:
     def snapshot(self) -> dict:
         return activity.activity_snapshot(self.serial)
 
+    def _exempt(self, snap: dict, extra=()) -> set[str]:
+        """Packages whose foreground use is the agent's, not the owner's: the ones this session
+        drives, the caller's target, and ones an agent opened or drove in the last few minutes
+        (activity.AGENT_SESSION_IDLE_MS). An app an agent opened hours ago is NOT exempt: the owner
+        may be using it now."""
+        return (set(self.driving) | set(extra)
+                | activity.agent_opened_packages(self.role, snap["boot_id"], snap["uptime_ms"]))
+
     def owner_busy(self, extra_exempt=()) -> str | None:
         try:
             snap = self.snapshot()
         except Exception as e:  # noqa: BLE001 - missing evidence means busy, never free
             return f"owner evidence unavailable: {type(e).__name__}: {e}"
-        exempt = (set(self.driving) | set(extra_exempt)
-                  | activity.agent_opened_packages(self.role, snap["boot_id"]))
-        return activity.owner_busy(self.serial, self.role, exempt, snapshot_fn=lambda _s: snap)
+        return activity.owner_busy(self.serial, self.role, self._exempt(snap, extra_exempt),
+                                   snapshot_fn=lambda _s: snap)
 
     def require_idle(self, extra_exempt=()):
         reason = self.owner_busy(extra_exempt)
@@ -184,11 +195,14 @@ class Phone:
         """Owner check plus foreground check from ONE snapshot. Returns the snapshot.
 
         Passes only when the owner is not using the phone and the foreground app is the one named
-        by `pkg`, or an app an agent opened since boot, or (allow_home) a home launcher."""
+        by `pkg`, or one this session drives or an agent recently opened or drove, or (allow_home) a
+        home launcher. A pass refreshes the agent session of the foreground app."""
         self.require_lock()
-        snap = self.snapshot()
-        exempt = (set(self.driving) | activity.agent_opened_packages(self.role, snap["boot_id"])
-                  | ({pkg} if pkg else set()))
+        try:
+            snap = self.snapshot()
+        except Exception as e:  # noqa: BLE001 - missing evidence means busy, never free
+            raise OwnerBusy(f"owner evidence unavailable: {type(e).__name__}: {e}") from e
+        exempt = self._exempt(snap, {pkg} if pkg else ())
         reason = activity.owner_busy(self.serial, self.role, exempt, snapshot_fn=lambda _s: snap)
         if reason:
             raise OwnerBusy(reason)
@@ -197,8 +211,10 @@ class Phone:
         ok = (fg == pkg) if pkg else (fg in exempt or (allow_home and fg in home))
         if not ok:
             raise WrongForeground(
-                f"foreground app {fg} was not opened by an agent; open it with open_app, or pass "
-                "pkg to assert it is the intended target")
+                f"foreground app {fg} was not opened by an agent recently; open it with open_app, "
+                "or pass pkg to assert it is the intended target")
+        if fg not in home:
+            activity.touch_agent_session(self.role, fg, snap)
         return snap
 
     # audit -----------------------------------------------------------------------------------
@@ -355,8 +371,14 @@ class Phone:
                 box = self.d(className="android.widget.EditText")
             if not box.exists:
                 raise LookupError("no editable field found")
+            try:
+                b = box.info["bounds"]
+                target = (b["left"], b["top"], b["right"], b["bottom"])
+            except Exception:  # noqa: BLE001 - no bounds: only the focus rule below applies
+                target = None
             for n in hierarchy.parse(self.d.dump_hierarchy()):
-                if n.password and n.focused:
+                # The fallback field may be unfocused: match the target by bounds as well.
+                if n.password and (n.focused or n.bounds == target):
                     raise SensitiveTarget("refusing to type into a password field")
             box.click()
             box.set_text(text)
@@ -395,9 +417,19 @@ class Phone:
         container: selector keywords for the scrollable node (default: the whole screen).
         Ends when a scroll no longer changes the screen, or after max_steps (complete=False).
         A page with no overlap with the previous one is counted in `gaps` (content may have been
-        skipped) and makes the read incomplete."""
+        skipped) and makes the read incomplete.
+
+        Owner activity and the foreground are re-checked before EVERY swipe (not just once), so a
+        long read stops (OwnerBusy / WrongForeground) the moment the owner picks up the phone or
+        another app comes to the front; it never swipes inside an app it did not start in."""
         with self._audited("read_long", container=container) as rec:
-            self.precheck(allow_home=True)
+            pinned = self.precheck(allow_home=True)["package"]
+
+            def swipe(direction):
+                self.precheck(pkg=pinned)
+                self.scroll(direction, scale, box)
+                time.sleep(pause)
+
             box = None
             if container:
                 el = self.find(**container)
@@ -412,8 +444,7 @@ class Phone:
                     if page == prev:
                         break
                     prev = page
-                    self.scroll("up", scale, box)
-                    time.sleep(pause)
+                    swipe("up")
             pages: list[list[tuple]] = []
             reason, complete, steps = "max_steps", False, 0
             for steps in range(1, max_steps + 1):
@@ -426,8 +457,7 @@ class Phone:
                     reason, complete = "end of content", True
                     break
                 pages.append(page)
-                self.scroll("down", scale, box)
-                time.sleep(pause)
+                swipe("down")
             lines, gaps, sticky = hierarchy.stitch_pages(pages)
             complete = complete and gaps == 0
             result = hierarchy.LongRead(lines=lines, steps=steps, complete=complete,

@@ -3,8 +3,9 @@ z0-hosts overlay, or discovery. Defaults are neutral.
 
 Environment (all optional):
   PHONE_SERIAL_S22 / PHONE_SERIAL_S25   hardware serial for a role (else the z0-hosts overlay)
-  PHONE_ADB                             adb binary (else an SDK adb, then PATH). Use the same build as
-                                        the running server: two builds restart each other's server
+  PHONE_ADB                             adb binary (else ~/android/sdk, ~/Android/Sdk, ANDROID_HOME,
+                                        then PATH; see adb_path). Use the same build as the running
+                                        server: two builds restart each other's server
   PHONE_ADB_PORT                        local adb server port (default: the adb default)
   PHONE_LOCK_DIR                        directory of the host UI locks (default /tmp, so every
                                         tool on the host agrees on one lock path per phone)
@@ -99,17 +100,17 @@ def calibration_dir() -> Path:
 
 
 def adb_path() -> str:
+    """The adb binary. Two adb builds sharing one server port restart each other's server and drop
+    every wireless transport, so the choice is stable and does NOT follow ANDROID_HOME first (build
+    shells often point it at another SDK): PHONE_ADB, then the host's driver SDK `~/android/sdk`,
+    then `~/Android/Sdk`, then ANDROID_HOME / ANDROID_SDK_ROOT, then PATH."""
     explicit = os.environ.get("PHONE_ADB")
     if explicit:
         return explicit
-    for var in ("ANDROID_HOME", "ANDROID_SDK_ROOT"):
-        base = os.environ.get(var)
-        if base and (Path(base) / "platform-tools" / "adb").is_file():
-            return str(Path(base) / "platform-tools" / "adb")
-    # Prefer an SDK adb over the distro one: two adb builds sharing one server port restart each
-    # other's server and drop every wireless transport.
-    for rel in ("Android/Sdk", "android/sdk"):  # common SDK locations under the home directory
-        cand = Path.home() / rel / "platform-tools" / "adb"
+    candidates = [Path.home() / rel / "platform-tools" / "adb" for rel in ("android/sdk", "Android/Sdk")]
+    candidates += [Path(os.environ[var]) / "platform-tools" / "adb"
+                   for var in ("ANDROID_HOME", "ANDROID_SDK_ROOT") if os.environ.get(var)]
+    for cand in candidates:
         if cand.is_file():
             return str(cand)
     found = shutil.which("adb")

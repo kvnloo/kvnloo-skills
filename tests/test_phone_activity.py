@@ -163,3 +163,49 @@ def test_static_launchers_and_env_extension(monkeypatch):
     got = activity.home_packages(None)
     assert {"org.example.home", "org.example.home2"} <= got
     assert activity.STATIC_LAUNCHERS <= got
+
+
+# the app being driven -------------------------------------------------------------------------
+
+def test_an_app_opened_long_ago_is_no_longer_the_driven_app(phone_env):
+    t0 = 1_000_000
+    activity.record_agent_open("s22", APP, {"boot_id": BOOT, "uptime_ms": t0})
+    assert activity.agent_opened_packages("s22", BOOT, t0 + 60_000) == {APP}
+    late = t0 + activity.AGENT_SESSION_IDLE_MS + 1
+    assert activity.agent_opened_packages("s22", BOOT, late) == set()
+    assert activity.agent_opened_packages("s22", BOOT) == {APP}        # boot scoping alone
+
+
+def test_driving_an_app_keeps_its_session_but_not_its_open_time(phone_env):
+    t0 = 1_000_000
+    activity.record_agent_open("s22", APP, {"boot_id": BOOT, "uptime_ms": t0})
+    later = t0 + 2 * activity.AGENT_SESSION_IDLE_MS
+    activity.touch_agent_session("s22", APP, {"boot_id": BOOT, "uptime_ms": later})
+    assert activity.agent_opened_packages("s22", BOOT, later + 60_000) == {APP}
+    assert activity.read_ledger("s22")[APP]["opened_uptime_ms"] == t0   # daily rule unchanged
+    activity.touch_agent_session("s22", OTHER, {"boot_id": BOOT, "uptime_ms": later})
+    activity.touch_agent_session("s22", APP, {"boot_id": "other-boot", "uptime_ms": 5})
+    assert set(activity.read_ledger("s22")) == {APP}                      # nothing invented
+    assert activity.read_ledger("s22")[APP]["last_agent_uptime_ms"] == later
+
+
+def test_owner_in_an_app_an_agent_left_alone_is_busy_on_the_worker(phone_env, monkeypatch):
+    """burst.py exempted only the app it drove. An app an agent opened earlier in the boot and then
+    left must not hide the owner using it now."""
+    import subprocess
+
+    from phone import adb as adbmod
+    from phone_testlib import make_phone
+    monkeypatch.setattr(adbmod, "run", lambda *a, **k: subprocess.CompletedProcess(
+        a, 0, "mCallState=0\n", ""))
+    t0 = 1_000_000
+    activity.record_agent_open("s22", OTHER, {"boot_id": BOOT, "uptime_ms": t0})
+    ph = make_phone()
+    del ph.owner_busy                                   # the real Phone.owner_busy
+    ph.driving = set()
+    stale = t0 + activity.AGENT_SESSION_IDLE_MS + 30_000
+    ph.snapshot = lambda: snap(10_000, OTHER, uptime=stale)
+    assert "owner active in" in ph.owner_busy()
+    fresh = t0 + 60_000
+    ph.snapshot = lambda: snap(10_000, OTHER, uptime=fresh)
+    assert ph.owner_busy() is None                      # still being driven by the agent

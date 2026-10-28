@@ -94,7 +94,10 @@ def lock_status(role: str) -> dict:
 class UILock:
     """Context manager taking the shared lock then the host lock, then proving ownership.
 
-    If an ancestor already holds the host lock, nothing is taken (inherited=True)."""
+    If an ancestor already holds the host lock (`flock /tmp/s22-ui.lock phone ...`), the host lock is
+    not taken again (inherited=True), but the shared lock still is unless an ancestor holds that
+    too: test workers that drive the screen hold ONLY the shared lock, so skipping it would let two
+    drivers share the phone. The wait for it is bounded, so the reversed order cannot deadlock."""
 
     def __init__(self, role: str, wait: float = 120.0, use_shared: bool = True):
         self.role = config.check_role(role)
@@ -120,12 +123,16 @@ class UILock:
 
     def __enter__(self):
         host = config.lock_path(self.role)
-        if host.exists() and holds_lock(host):
-            self.inherited = True
-            return self
         deadline = time.time() + self.wait
         shared = config.shared_lock_path(self.role) if self.use_shared else None
+        if shared is not None and shared.exists() and holds_lock(shared):
+            shared = None                       # an ancestor holds it already
         try:
+            if host.exists() and holds_lock(host):
+                self.inherited = True
+                if shared is not None:
+                    self._take(shared, deadline)
+                return self
             if shared is not None:
                 self._take(shared, deadline)
             self._take(host, deadline)

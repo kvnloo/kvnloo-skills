@@ -102,6 +102,20 @@ def candidates(role: str, rows: list[dict], adverts: list[dict]) -> list[str]:
     return list(dict.fromkeys(sorted(out, key=lambda c: c != hardware)))
 
 
+def prove(role: str, transport: str) -> Transport:
+    """Use a caller-chosen transport only after `getprop ro.serialno` proves it is this role's
+    phone. A transport known to be another role's phone is refused without being probed."""
+    hardware = config.role_hardware(role)["serial"]
+    others = config.other_role_serials(role)
+    if transport in others or any(transport.startswith(f"adb-{o}-") for o in others):
+        raise DeviceNotFound(f"{role}: the given transport belongs to another role's phone")
+    ident = run(["shell", "getprop", "ro.serialno"], serial=transport, timeout=15, check=False)
+    if ident.returncode == 0 and ident.stdout.strip() == hardware:
+        return Transport(serial=transport, hardware=hardware,
+                         kind="usb" if transport == hardware else "wireless")
+    raise DeviceNotFound(f"{role}: the given transport is not this role's phone")
+
+
 def discover(role: str) -> Transport:
     hardware = config.role_hardware(role)["serial"]
     rows = devices()

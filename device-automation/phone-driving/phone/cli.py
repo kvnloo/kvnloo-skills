@@ -156,6 +156,12 @@ def read_value(args) -> str:
 
 # command handlers -----------------------------------------------------------------------------
 
+def _pkgs(args) -> set:
+    """The package a command names with --pkg: the owner check at connect treats it as the app
+    being driven, exactly like the foreground check that follows."""
+    return {args.pkg} if getattr(args, "pkg", None) else set()
+
+
 def cmd_devices(args):
     rows = adbmod.visible_roles()
     if args.role:
@@ -183,7 +189,7 @@ def cmd_lock_status(args):
 
 
 def cmd_open(args):
-    with Phone(args.role, lock_wait=args.lock_wait) as ph:
+    with Phone(args.role, lock_wait=args.lock_wait, exempt_pkgs={args.pkg}) as ph:
         ph.open_app(args.pkg)
         return {"ok": True, "opened": args.pkg}
 
@@ -192,7 +198,7 @@ def cmd_tap(args):
     sel = selector_from(args)
     if not args.label and not sel:
         raise SystemExit("tap needs a label or a selector")
-    with Phone(args.role, lock_wait=args.lock_wait) as ph:
+    with Phone(args.role, lock_wait=args.lock_wait, exempt_pkgs=_pkgs(args)) as ph:
         rec = ph.tap(args.label, pkg=args.pkg, **sel)
         return {"ok": True, "tapped": args.label or sel, "at": rec.get("at_xy")}
 
@@ -206,7 +212,7 @@ def cmd_type(args):
 
 def cmd_text(args):
     sel = selector_from(args)
-    with Phone(args.role, lock_wait=args.lock_wait) as ph:
+    with Phone(args.role, lock_wait=args.lock_wait, exempt_pkgs=_pkgs(args)) as ph:
         text = ph.get_text(**sel) if sel else ph.screen_text(pkg=args.pkg)
         if args.json:
             return {"ok": True, "text": text, "redaction": ph.last_redaction}
@@ -230,7 +236,7 @@ def cmd_read_long(args):
 
 
 def cmd_nodes(args):
-    with Phone(args.role, lock_wait=args.lock_wait) as ph:
+    with Phone(args.role, lock_wait=args.lock_wait, exempt_pkgs=_pkgs(args)) as ph:
         ph.precheck(pkg=args.pkg, allow_home=args.pkg is None)
         rows = []
         for n in ph.nodes(pkg=args.pkg):

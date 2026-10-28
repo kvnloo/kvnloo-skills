@@ -4,7 +4,8 @@ Order (each step can refuse before the UI is touched):
   1. quota pause (account wide, fail closed)
   2. host UI lock (shared lock first, then the host lock, /proc/locks proof)
   3. quota pause again, then per-phone cooldown (real sends only)
-  4. connect; owner-activity check (refusal leaves the tag eligible)
+  4. discover; owner-activity check over adb; only then connect uiautomator2 (refusal leaves
+     the tag eligible)
   5. claim the tag (atomic, before any UI send)             <- at-most-once starts here
   6. reserve the cooldown BEFORE transport
   7. adapter.launch (the UI work); a crash after the claim is "unconfirmed", never retried
@@ -22,7 +23,7 @@ from pathlib import Path
 from . import config, lock as lockmod, receipts
 from .claims import ClaimStore
 from .device import Phone
-from .errors import LockError, PhoneError
+from .errors import LockError, OwnerBusy, PhoneError
 from .quota import DEFAULT_PAUSE_SECONDS
 
 REFUSALS = ("owner_busy", "quota_paused", "cooling_down", "already_claimed", "lock_busy")
@@ -71,7 +72,10 @@ def dispatch_one(adapter, role: str, tag: str, text: str, *, effort: str | None 
             if c["cooling"]:
                 return refuse("cooling_down", c["reason"])
         try:
+            # connect() checks the owner over adb BEFORE uiautomator starts (as burst.py did).
             ph = Phone(role, lock=False, exempt_pkgs={adapter.package}).connect()
+        except OwnerBusy as e:
+            return refuse("owner_busy", str(e))
         except (PhoneError, OSError) as e:
             return refuse("failed", f"{type(e).__name__}: {e}")
         reason = ph.owner_busy(extra_exempt={adapter.package})

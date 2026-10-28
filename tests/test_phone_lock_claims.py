@@ -71,6 +71,38 @@ def test_a_child_inherits_the_proof_through_its_ancestor():
     assert out.stdout.strip() == "inherited", out.stdout + out.stderr
 
 
+def _hold(path, seconds=5):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    holder = subprocess.Popen(
+        [sys.executable, "-c",
+         "import fcntl, sys, time\n"
+         "f = open(sys.argv[1], 'a'); fcntl.flock(f, fcntl.LOCK_EX)\n"
+         f"print('held', flush=True); time.sleep({seconds})", str(path)],
+        stdout=subprocess.PIPE, text=True)
+    assert holder.stdout.readline().strip() == "held"
+    return holder
+
+
+def test_an_inherited_host_lock_still_respects_a_screen_test_holding_the_shared_lock():
+    """`flock /tmp/s22-ui.lock phone ...` must not drive the screen while a test worker holds only
+    the shared lock (launch_queue.py took the shared lock first for exactly this reason)."""
+    import fcntl
+    host = config.lock_path("s22")
+    with host.open("a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)                   # "an ancestor" (this process) holds host
+        worker = _hold(config.shared_lock_path("s22"))
+        try:
+            with pytest.raises(LockError, match="busy"):
+                lockmod.UILock("s22", wait=0.6).__enter__()
+        finally:
+            worker.kill()
+            worker.wait()
+        with lockmod.UILock("s22", wait=2) as lk:    # free again: shared taken, host inherited
+            assert lk.inherited is True
+            assert lockmod.lock_status("s22")["shared"]["holders"][0]["is_ancestor"] is True
+        assert not lockmod.lock_status("s22")["shared"]["held"]
+
+
 def test_proof_parses_proc_locks_like_the_kernel_prints_it(tmp_path):
     path = tmp_path / "x.lock"
     path.write_text("")

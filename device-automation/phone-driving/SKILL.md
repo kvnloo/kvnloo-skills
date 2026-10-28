@@ -50,10 +50,16 @@ phone. Those are not available here on purpose.
    The package pins every adb call to the local server and ignores `ADB_SERVER_SOCKET`.
 3. **Hold the host UI lock.** Every command takes `<lock dir>/<role>-ui.lock` itself, or proves with
    `/proc/locks` that an ancestor holds it (`flock -w 120 FILE phone ...` works). No lock, no UI.
-   Never wrap a tool that takes the lock itself in another flock on the same path: that deadlocks.
-4. **Respect the owner.** Before any read or input, owner activity is checked (`dumpsys power`
-   `mLastUserActivityTime` against uptime, plus the agent-open ledger). Busy or unreadable evidence
-   means refuse (exit code 3). Do not retry in a tight loop; wait or pick another task.
+   It also takes the shared lock that screen test workers hold (`~/tmp/<role>-ui.lock`), even when
+   an ancestor holds the host lock. Never wrap a tool that takes the lock itself in another flock on
+   the same path: that deadlocks.
+4. **Respect the owner.** Before uiautomator is even started, and again before any read or input,
+   owner activity is checked over adb (`dumpsys power` `mLastUserActivityTime` against uptime, plus
+   the agent-open ledger). On the worker phone, recent activity is the agent's own only in a home
+   launcher or the app being driven: one this session opened, one you name with `--pkg`, or one an
+   agent opened or drove in the last 5 minutes. Long reads re-check before every swipe. Busy or
+   unreadable evidence means refuse (exit code 3). Do not retry in a tight loop; wait or pick
+   another task.
 5. **Roles.** `s22` is the worker phone. `s25` is the owner's daily phone: it is refused unless the
    owner sets `PHONE_ALLOW_ROLES`. Do not drive the S25 on your own initiative.
 6. **Never install, uninstall, change the IME or keyboard, change settings, pair, or clear or stop
@@ -77,7 +83,8 @@ phone. Those are not available here on purpose.
 ## Prerequisites
 
 - `uv` and an SDK `adb` (use the same adb build as the running server; two builds restart each
-  other's server). Set `PHONE_ADB` if it is not under a common SDK location.
+  other's server). The order is `PHONE_ADB`, `~/android/sdk`, `~/Android/Sdk`, `ANDROID_HOME`, then
+  PATH: a build shell's `ANDROID_HOME` never silently switches the driver to another adb build.
 - The phone is already authorised for USB or wireless debugging. This skill never pairs.
 - The role's hardware serial: `PHONE_SERIAL_S22` / `PHONE_SERIAL_S25`, or a phone entry with the
   alias `s22` / `s25` and a `serial` in the private z0-hosts `devices.toml`. Discovery proves
@@ -190,11 +197,17 @@ phone nodes --role s22 --pkg com.example.app
 ## Guard
 
 Importing `phone` activates `phone.guard` (stdlib only). It blocks, with `PhoneGuardError`:
-adbutils `install`, `install_remote`, `uninstall`; uiautomator2 `_setup_ime`, `send_keys`,
-`set_input_ime`, the clipboard getter and setter, `set_clipboard`, `app_install`, `app_uninstall`,
-`app_stop_all`; any `shell` whose arguments contain `pm install|uninstall|clear|grant...`,
-`cmd package ...`, `ime enable|set|disable|reset`, `settings put|delete|reset`, `svc` toggles, or an
-`am force-stop` of a protected package; and adb binary calls with `install`, `uninstall`, `pair`.
+adbutils `install`, `install_remote`, `uninstall`, `server_kill`; uiautomator2 `_setup_ime`,
+`send_keys`, `set_input_ime`, the clipboard getter and setter, `set_clipboard`, `app_install`,
+`app_uninstall`, `app_stop_all`, `freeze_rotation`, `set_orientation`; any shell command (matched by
+basename, so `/system/bin/pm` counts) with `pm install|uninstall|clear|grant...`,
+`cmd package ...`, `ime enable|set|disable|reset`, `settings put|delete|reset`, `device_config` and
+`appops` writes, `setprop`, `service call`, `svc` toggles, or a stop of a protected package
+(`am`/`cmd activity` `force-stop|kill|stop-app`, `am kill-all`). The same policy runs at the adb
+wire level (`AdbConnection.send_command`: `shell:`, `shell,v2:`, `exec:`, `abb_exec:`), so lower-level
+adbutils helpers cannot skip it, and on the uiautomator2 HTTP request under `jsonrpc_call`. adb binary
+calls with `install`, `uninstall`, `pair`, `abb`, `kill-server` are blocked, also through
+`bash -c "..."` or wrappers such as `timeout` and `flock`.
 
 `phone selftest` (or `python -m phone.guard selftest`) proves it. `scripts/install-guard.sh` can also
 install the guard as a `sitecustomize` hook in each Python's stdlib directory so raw scripts are
@@ -213,6 +226,9 @@ decides whether to run it.
 - Normal reply `Share` controls are not overlays. Pressing Back on them exits ChatGPT.
 - `New chat` is inside `Menu` on the ChatGPT home screen, and it retains an unsent draft.
 - If another driver holds the lock, `phone` waits `--lock-wait` seconds (default 120) and refuses.
+- An app an agent opened stops counting as "being driven" after 5 minutes without agent input; a
+  later `phone tap` then refuses with `WrongForeground` or `OwnerBusy`. Re-run `phone open`, or name
+  the app with `--pkg`. This is what keeps the owner's own use of that app from being overridden.
 - Hierarchy dumps can fail on animated screens; `wait_idle` and a retry usually fix it.
 - Drawer layouts change with app versions (the old `Recents` label is gone), so chats are opened by
   exact title through Search, never by drawer position. A title the drawer truncates with an

@@ -165,3 +165,36 @@ def test_s25_is_not_enabled_by_default(monkeypatch):
         config.require_role_allowed("s25")
     monkeypatch.setenv("PHONE_ALLOW_ROLES", "s22,s25")
     config.require_role_allowed("s25")
+
+
+def test_an_explicit_transport_must_prove_it_is_the_role_phone(roles, monkeypatch):
+    fake = FakeAdb({"wifi.example:41000": WORKER, "host.example:5555": DAILY})
+    monkeypatch.setattr(adb, "run", fake)
+    t = adb.prove("s22", "wifi.example:41000")
+    assert t.hardware == WORKER and t.kind == "wireless"
+    with pytest.raises(DeviceNotFound):          # answers, but it is the other phone
+        adb.prove("s22", "host.example:5555")
+
+
+def test_an_explicit_transport_of_another_role_is_refused_without_a_probe(roles, monkeypatch):
+    fake = FakeAdb({DAILY: DAILY})
+    monkeypatch.setattr(adb, "run", fake)
+    for transport in (DAILY, f"adb-{DAILY}-GhIjKl._adb-tls-connect._tcp"):
+        with pytest.raises(DeviceNotFound):
+            adb.prove("s22", transport)
+    assert fake.calls == []
+
+
+def test_adb_choice_does_not_follow_a_build_shell_android_home(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    driver = home / "android" / "sdk" / "platform-tools"
+    other = tmp_path / "gradle-sdk" / "platform-tools"
+    for d in (driver, other):
+        d.mkdir(parents=True)
+        (d / "adb").write_text("")
+    monkeypatch.delenv("PHONE_ADB", raising=False)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("ANDROID_HOME", str(other.parent))
+    assert config.adb_path() == str(driver / "adb")
+    monkeypatch.setenv("PHONE_ADB", "/opt/explicit/adb")
+    assert config.adb_path() == "/opt/explicit/adb"

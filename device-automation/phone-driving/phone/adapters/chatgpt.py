@@ -138,10 +138,16 @@ class ChatGPT(Adapter):
 
     def drawer(self, ph: Phone) -> None:
         """Open the side drawer (its Search control is the proof), unwinding search and keyboards
-        first. Never swipes over a keyboard."""
+        first. Never swipes over a keyboard. Back is pressed only while ChatGPT is in front: if a
+        Back left the app, ChatGPT is started again (as in new_chat) instead of pressing Back in
+        whatever app is now in front."""
         ph.open_app(PKG)
         d = ph.d
         for _ in range(5):
+            if not d(packageName=PKG).exists:
+                d.app_start(PKG)
+                if not wait_for(lambda: d(packageName=PKG).exists, 4):
+                    continue
             if d(packageName=PKG, description="Search").exists:
                 return
             d(packageName=PKG, description="Clear").click_exists(timeout=1)

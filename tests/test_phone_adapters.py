@@ -423,3 +423,109 @@ def test_open_title_rejects_an_empty_title(ph):
 def test_read_with_a_missing_title_is_a_lookup_error(ph, dev):
     with pytest.raises(LookupError, match="exact title"):
         ChatGPT().read(ph, title="No such chat")
+
+
+# Back is never pressed outside ChatGPT -------------------------------------------------------
+
+class ExitingDevice(t.FakeDevice):
+    """A ChatGPT build whose composer has no Menu control, where Back leaves the app for another
+    app (the Share-sheet / Back-exits-ChatGPT class of bug)."""
+    OTHER = "com.example.private"
+
+    def __init__(self):
+        super().__init__()
+        self.back_in = []
+
+    def elements(self):
+        if self.screen == "other":
+            return [t.el(text="Private notes", pkg=self.OTHER, desc="Menu")]
+        if self.screen == "new":
+            return [e for e in super().elements() if e["desc"] != "Menu"]
+        return super().elements()
+
+    def press(self, key):
+        if key == "back":
+            self.back_in.append(self.screen)
+            if self.screen == "new":
+                self.screen = "other"
+                self.pressed.append(key)
+                return
+        super().press(key)
+
+    def app_start(self, pkg):
+        self.started.append(pkg)
+        self.screen = "new"
+
+
+def test_drawer_never_presses_back_outside_chatgpt():
+    dev = ExitingDevice()
+    ph = t.make_phone(device=dev)
+    with pytest.raises(RuntimeError, match="drawer not reachable"):
+        ChatGPT().drawer(ph)
+    assert "other" not in dev.back_in, dev.back_in       # every Back was pressed inside ChatGPT
+    assert dev.started.count(t.PKG) >= 2                 # it came back by starting ChatGPT again
+
+
+# long reads re-check the owner before every swipe ---------------------------------------------
+
+def test_read_long_rechecks_owner_and_foreground_before_every_swipe(ph, dev, monkeypatch):
+    from phone.errors import WrongForeground
+    calls = []
+
+    def precheck(**kw):
+        calls.append(("precheck", kw))
+        if len([c for c in calls if c[0] == "precheck"]) > 2:
+            raise WrongForeground("foreground app com.example.private")
+        return {"package": t.PKG}
+
+    ph.precheck = precheck
+    ph.scroll = lambda *a, **k: calls.append(("scroll", a))
+    pages = iter(range(100))
+    monkeypatch.setattr("phone.hierarchy.text_entries", lambda *a, **k: [("line", next(pages))])
+    dev.screen = "chat"
+    with pytest.raises(WrongForeground):
+        ph.read_long(max_steps=10)
+    kinds = [c[0] for c in calls]
+    assert kinds[:4] == ["precheck", "precheck", "scroll", "precheck"]
+    assert kinds.count("scroll") == 1                      # stopped before the next swipe
+    assert calls[1][1] == {"pkg": t.PKG}                   # pinned to the app it started in
+
+
+# typing never goes into a password field ------------------------------------------------------
+
+def test_type_text_refuses_an_unfocused_password_fallback_field(monkeypatch):
+    from phone import Phone
+    from phone.errors import SensitiveTarget
+
+    class Box:
+        def __init__(self, exists, bounds=None):
+            self.exists, self._b, self.typed = exists, bounds, []
+
+        @property
+        def info(self):
+            l, tp, r, b = self._b
+            return {"bounds": {"left": l, "top": tp, "right": r, "bottom": b}}
+
+        def click(self):
+            pass
+
+        def set_text(self, text):
+            self.typed.append(text)
+
+    pw = Box(True, (0, 200, 500, 300))
+
+    class Dev:
+        def __call__(self, **sel):
+            return Box(False) if sel.get("focused") else pw
+
+        def dump_hierarchy(self):
+            return ('<hierarchy><node class="android.widget.EditText" package="com.example.app" '
+                    'text="" content-desc="" password="true" focused="false" '
+                    'bounds="[0,200][500,300]"/></hierarchy>')
+
+    ph = t.make_phone(device=Dev())
+    del ph.screenshot
+    ph.precheck = lambda **kw: {"package": "com.example.app"}
+    with pytest.raises(SensitiveTarget):
+        Phone.type_text(ph, "hunter2")
+    assert pw.typed == []

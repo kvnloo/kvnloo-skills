@@ -35,11 +35,14 @@ class FakeAdapter(Adapter):
 
 class FakePh:
     busy = None
+    busy_at_connect = None
 
     def __init__(self, *a, **kw):
         pass
 
     def connect(self):
+        if FakePh.busy_at_connect:
+            raise OwnerBusy(FakePh.busy_at_connect)
         return self
 
     def owner_busy(self, extra_exempt=()):
@@ -52,6 +55,7 @@ class FakePh:
 @pytest.fixture(autouse=True)
 def fake_phone(monkeypatch):
     FakePh.busy = None
+    FakePh.busy_at_connect = None
     monkeypatch.setattr(dispatch, "Phone", FakePh)
 
 
@@ -102,6 +106,35 @@ def test_owner_busy_refuses_and_leaves_the_tag_claimable(phone_env):
     assert row["status"] == "owner_busy" and a.launched == []
     assert dispatch.claim_store(a).claim_tag("TAG-1", "s22") is True
     assert a.cooldown("s22").cooling()["cooling"] is False
+
+
+def test_owner_busy_at_connect_is_a_refusal_before_any_ui(phone_env):
+    a = FakeAdapter()
+    FakePh.busy_at_connect = "owner active in com.example.private within 60 s (worker phone)"
+    row = run(a)
+    assert row["status"] == "owner_busy" and a.launched == []
+    assert dispatch.claim_store(a).claim_tag("TAG-1", "s22") is True
+    assert a.cooldown("s22").cooling()["cooling"] is False
+
+
+def test_phone_connect_checks_the_owner_before_starting_uiautomator(phone_env, monkeypatch):
+    """burst.py checked the owner over adb before importing uiautomator2: a busy owner's screen
+    is never dumped and the instrumentation is never started."""
+    import sys as _sys
+    import types
+
+    from phone import adb as adbmod, device
+    started = []
+    fake_u2 = types.SimpleNamespace(connect=lambda *a, **k: started.append(a))
+    monkeypatch.setitem(_sys.modules, "uiautomator2", fake_u2)
+    monkeypatch.setattr(device.lockmod, "require_ui_lock", lambda role: None)
+    monkeypatch.setattr(device.adbmod, "discover",
+                        lambda role: adbmod.Transport("FAKE-SERIAL", "FAKE-SERIAL", "usb"))
+    ph = device.Phone("s22", lock=False)
+    ph.owner_busy = lambda extra_exempt=(): "owner active in com.example.private within 60 s"
+    with pytest.raises(OwnerBusy):
+        ph.connect()
+    assert started == [] and ph.d is None
 
 
 def test_lock_busy_is_a_refusal_not_a_hang(phone_env):

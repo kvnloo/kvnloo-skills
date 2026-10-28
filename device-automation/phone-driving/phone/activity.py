@@ -5,6 +5,12 @@ Before claiming work and again before UI input, the driver proves the owner is n
 "busy", never "free". The ledger maps packages an agent launched to the device boot id and uptime, so
 a foreground app is exempt only when an agent launched it since the owner's last activity.
 
+The app being driven: the production launcher exempted exactly one app (ChatGPT, which it drove).
+Here the driven apps are the ones this session opened, the caller's explicit target, and apps an agent
+opened or drove within AGENT_SESSION_IDLE_MS (so a multi-command CLI session keeps working). An app an
+agent opened earlier in the boot and then left alone is NOT exempt: recent activity in it is the
+owner's.
+
 Rules by phone kind (ported from the production launcher):
 
   worker phone (default: s22)   pause when the owner touched the phone within 60 s while an app other
@@ -38,6 +44,8 @@ STATIC_LAUNCHERS = frozenset({
 })
 WORKER_ACTIVITY_WINDOW_MS = 60_000
 IDLE_WORKER_MIN_AGE_MS = 120_000
+# How long after an agent last opened or drove an app that app still counts as "being driven".
+AGENT_SESSION_IDLE_MS = 5 * 60_000
 
 SNAPSHOT_CMD = ("cat /proc/uptime; cat /proc/sys/kernel/random/boot_id; "
                 "dumpsys power | grep mLastUserActivityTime; "
@@ -84,7 +92,9 @@ def home_packages(serial: str | None = None) -> frozenset:
                                   "-a android.intent.action.MAIN -c android.intent.category.HOME"],
                                  serial=serial, timeout=15).stdout
                 m = re.findall(r"^([A-Za-z0-9_.]+)/", out, re.M)
-                _HOME_CACHE[serial] = frozenset(m[-1:])
+                # With no default launcher Android resolves to its chooser ("android/...ResolverActivity"),
+                # which is not a home screen.
+                _HOME_CACHE[serial] = frozenset(p for p in m[-1:] if p != "android")
             except (OSError, subprocess.SubprocessError):
                 _HOME_CACHE[serial] = frozenset()
         found = set(_HOME_CACHE[serial])
@@ -103,28 +113,59 @@ def read_ledger(role: str) -> dict:
     return ledger
 
 
+def _write_ledger(role: str, ledger: dict) -> None:
+    path = config.ledger_path(role)
+    tmp = path.with_name(path.name + f".tmp{os.getpid()}")
+    tmp.write_text(json.dumps(ledger) + "\n")
+    os.replace(tmp, path)
+
+
 def record_agent_open(role: str, package: str, snapshot: dict) -> None:
     """Call under the host UI lock whenever an agent launches a package, with a snapshot taken
     immediately before the launch."""
-    path = config.ledger_path(role)
     try:
         ledger = read_ledger(role)
     except (OSError, ValueError):
         ledger = {}
     ledger[package] = {"boot_id": snapshot["boot_id"],
                        "opened_uptime_ms": snapshot["uptime_ms"], "opened_at": now()}
-    tmp = path.with_name(path.name + f".tmp{os.getpid()}")
-    tmp.write_text(json.dumps(ledger) + "\n")
-    os.replace(tmp, path)
+    _write_ledger(role, ledger)
 
 
-def agent_opened_packages(role: str, boot_id: str) -> set[str]:
+def touch_agent_session(role: str, package: str, snapshot: dict) -> None:
+    """Mark that an agent drove `package` at this snapshot (under the host UI lock). Only an entry
+    an agent opened in this boot is refreshed; opened_uptime_ms is never changed, so the daily-phone
+    rule (agent launch since the owner's last activity) is unaffected. Never raises."""
+    try:
+        ledger = read_ledger(role)
+        entry = ledger.get(package)
+        if not isinstance(entry, dict) or entry.get("boot_id") != snapshot["boot_id"]:
+            return
+        entry["last_agent_uptime_ms"] = snapshot["uptime_ms"]
+        _write_ledger(role, ledger)
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+
+
+def agent_opened_packages(role: str, boot_id: str, uptime_ms: int | None = None,
+                          idle_ms: int = AGENT_SESSION_IDLE_MS) -> set[str]:
+    """Packages an agent opened in this boot. With `uptime_ms`, only those an agent opened or drove
+    within `idle_ms` before it (the app is still being driven)."""
     try:
         ledger = read_ledger(role)
     except (OSError, ValueError):
         return set()
-    return {p for p, v in ledger.items()
-            if isinstance(v, dict) and v.get("boot_id") == boot_id}
+    out = set()
+    for p, v in ledger.items():
+        if not isinstance(v, dict) or v.get("boot_id") != boot_id:
+            continue
+        if uptime_ms is not None:
+            stamps = [s for s in (v.get("opened_uptime_ms"), v.get("last_agent_uptime_ms"))
+                      if isinstance(s, int)]
+            if not stamps or not 0 <= uptime_ms - max(stamps) <= idle_ms:
+                continue
+        out.add(p)
+    return out
 
 
 # policy -------------------------------------------------------------------------------------
