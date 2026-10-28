@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tomllib
@@ -196,6 +197,81 @@ class Installer:
                 return found[0].parent.resolve() / name
         return directory.resolve() / name
 
+    def hub_entries(self):
+        """Read Hermes ownership, preserving path identity even for symlink leaves."""
+        entries = []
+        for harness in ('hermes-clean', 'hermes-chiefstaff'):
+            root = self.directories[harness].resolve()
+            lock = root / '.hub/lock.json'
+            if not exists(lock):
+                continue
+            try:
+                data = json.loads(lock.read_text(encoding='utf-8-sig'))
+                if not isinstance(data, dict) or data.get('version') != 1 or not isinstance(data.get('installed'), dict):
+                    raise ValueError('unsupported lock format')
+                for name, entry in data['installed'].items():
+                    if not isinstance(name, str) or not isinstance(entry, dict):
+                        raise ValueError('invalid installed entry')
+                    path = entry.get('install_path')
+                    if (not isinstance(path, str) or '\\' in path or not path or
+                            path.startswith('/') or any(p in ('', '.', '..') for p in path.split('/')) or
+                            path.split('/')[-1] != name):
+                        raise ValueError(f'invalid install path for {name}')
+                    relative = Path(path)
+                    dest = (root / relative).parent.resolve() / relative.name
+                    if not dest.is_relative_to(root):
+                        raise ValueError(f'install path escapes skills directory: {path}')
+                    entries.append((harness, root, name, dest, entry))
+            except (OSError, ValueError) as error:
+                raise ValueError(f'Cannot safely read Hermes hub ownership {lock}: {error}') from error
+        return entries
+
+    @staticmethod
+    def hub_conflicts(entries, dest, name=None):
+        return [(h, path, entry) for h, root, skill, path, entry in entries
+                if (dest == path or dest.is_relative_to(path) or path.is_relative_to(dest) or
+                    (dest.is_relative_to(root) and skill == name))]
+
+    @staticmethod
+    def hub_backup_matches(original, entry):
+        if not original or original.is_symlink() or not original.is_dir():
+            return False
+        expected = entry.get('content_hash')
+        if not isinstance(expected, str) or not re.fullmatch(r'sha256:[0-9a-f]{16}', expected):
+            return False
+        files = []
+        for path in original.rglob('*'):
+            mode = path.lstat().st_mode
+            if stat.S_ISREG(mode):
+                files.append((path.relative_to(original).as_posix(), path))
+            elif not stat.S_ISDIR(mode):
+                return False
+        digest = hashlib.sha256()
+        for relative, path in sorted(files):
+            digest.update(relative.encode('utf-8') + b'\0')
+            with path.open('rb') as file:
+                for chunk in iter(lambda: file.read(1024 * 1024), b''):
+                    digest.update(chunk)
+        return expected == 'sha256:' + digest.hexdigest()[:16]
+
+    def check_uninstall_hub(self, records):
+        entries = self.hub_entries()
+        for text, record in records.items():
+            dest = Path(text)
+            # An interrupted apply with no move has no filesystem effect to undo.
+            if (record.get('phase') == 'prepared' and not matches(dest, record['target']) and
+                    not (record['original'] and exists(record['original']))):
+                continue
+            conflicts = self.hub_conflicts(entries, dest)
+            original = Path(record['original']) if record['original'] else None
+            if conflicts and not all(
+                    dest == path and (self.hub_backup_matches(original, entry) or
+                                      (record.get('phase') == 'restoring' and
+                                       self.hub_backup_matches(dest, entry)))
+                    for _, path, entry in conflicts):
+                raise ValueError(f'HUB CONFLICT uninstall {dest}: cannot prove the backup matches the hub lock')
+
+
     def plan(self):
         operations = {}
         # A harness that is not installed is skipped; its directories are never invented.
@@ -207,6 +283,7 @@ class Installer:
                 print(f'SKIP [{h}] harness directory missing: {self.directories[h].parent}')
         totals = {h: {'links': 0, 'folders': 0, 'symlinks': 0, 'files': 0} for h in active}
         sources = set()
+        hub = self.hub_entries()
         for name, spec in self.skills():
             relevant = [h for h in active if h in spec['harnesses']]
             if not relevant:
@@ -225,6 +302,12 @@ class Installer:
                     print(f'ARCHIVED [{h}] {name}: left archived')
                     continue
                 dest = self.destination(h, name)
+                conflicts = self.hub_conflicts(hub, dest, name)
+                if conflicts and not (dest == source and not dest.is_symlink() and
+                                      all(path == dest for _, path, _ in conflicts)):
+                    owners = ', '.join(f'{owner}: {path}' for owner, path, _ in conflicts)
+                    raise ValueError(f'HUB CONFLICT [{h}] {dest}: owned by {owners}; '
+                                     'preserve the hub skill and resolve ownership first')
                 if dest == source or (exists(dest) and dest.resolve() == source):
                     print(f'KEEP [{h}] {dest}')
                     continue
@@ -324,9 +407,11 @@ class Installer:
                 raise ValueError(f'Refusing to replace user changes: {d}')
             if r['original'] and not exists(r['original']) and r.get('phase') != 'restoring':
                 raise ValueError(f'Original backup unavailable: {d}')
+        self.check_uninstall_hub(records)
         with self.locked():
             if any(self.state['links'].get(d) != r for d, r in records.items()):
                 raise ValueError('State changed during uninstall; retry')
+            self.check_uninstall_hub(records)
             for d, r in records.items():
                 dest = Path(d)
                 backup = Path(r['backup'])

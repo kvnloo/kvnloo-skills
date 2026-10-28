@@ -1,5 +1,6 @@
 """Exercise the installer only inside disposable homes and repositories."""
 import errno
+import hashlib
 import importlib.util
 import io
 import json
@@ -153,6 +154,129 @@ pack = "default"
         self.assertEqual((folder / '.usage.json').read_text(), '{"sample":{"use_count":22}}')
         self.run_cli('--uninstall')
         self.assertEqual((original / 'SKILL.md').read_text(), 'original')
+
+    def hub_lock(self, skill, *, profile='chiefstaff', path='research/sample', content_hash=None):
+        root = self.home / '.hermes/profiles' / profile / 'skills'
+        lock = root / '.hub/lock.json'
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        if content_hash is None:
+            digest = hashlib.sha256()
+            for file in sorted(p for p in skill.rglob('*') if p.is_file()):
+                digest.update(file.relative_to(skill).as_posix().encode() + b'\0')
+                digest.update(file.read_bytes())
+            content_hash = 'sha256:' + digest.hexdigest()[:16]
+        lock.write_text(json.dumps({'version': 1, 'installed': {
+            'sample': {'install_path': path, 'content_hash': content_hash}}}))
+        return lock
+
+    def test_hub_conflict_aborts_entire_apply_and_preserves_lock(self):
+        skill = self.real_skill('.hermes/profiles/chiefstaff/skills/research')
+        lock = self.hub_lock(skill)
+        before = self.snapshot()
+        for action in ('--plan', '--apply'):
+            result = self.run_cli(action, ok=False)
+            self.assertIn('HUB CONFLICT', result.stderr)
+            self.assertIn(str(skill), result.stderr)
+            self.assertEqual(self.snapshot(), before)
+        self.assertFalse(skill.is_symlink())
+        self.assertTrue(lock.is_file())
+
+    def test_missing_hub_skill_name_still_blocks_duplicate(self):
+        missing = self.target('.hermes/profiles/chiefstaff/skills/research')
+        self.hub_lock(missing, content_hash='sha256:' + '0' * 16)
+        before = self.snapshot()
+        result = self.run_cli('--apply', '--harness', 'hermes-chiefstaff', ok=False)
+        self.assertIn('HUB CONFLICT', result.stderr)
+        self.assertEqual(before, self.snapshot())
+
+    def test_alias_to_hermes_root_cannot_duplicate_hub_name(self):
+        skill = self.real_skill('.hermes/profiles/chiefstaff/skills/research')
+        self.hub_lock(skill)
+        root = skill.parent.parent
+        (self.home / '.claude-home/skills').symlink_to(root)
+        before = self.snapshot()
+        self.assertIn('HUB CONFLICT', self.run_cli('--apply', '--harness', 'claude', ok=False).stderr)
+        self.assertEqual(before, self.snapshot())
+
+    def test_existing_hub_link_to_source_is_reported_as_conflict(self):
+        target = self.target('.hermes/profiles/chiefstaff/skills/research')
+        target.parent.mkdir(parents=True)
+        target.symlink_to(self.repo / 'skills/sample')
+        self.hub_lock(target)
+        before = self.snapshot()
+        self.assertIn('HUB CONFLICT', self.run_cli('--apply', ok=False).stderr)
+        self.assertEqual(before, self.snapshot())
+
+    def test_hub_skill_used_as_its_own_source_is_kept(self):
+        target = self.real_skill('.hermes/profiles/chiefstaff/skills/research')
+        lock = self.hub_lock(target)
+        self.manifest.write_text(self.manifest.read_text().replace(
+            'source = "skills/sample"',
+            'source = "local:~/.hermes/profiles/chiefstaff/skills/research/sample"'))
+        before = self.snapshot()
+        result = self.run_cli('--apply', '--harness', 'hermes-chiefstaff')
+        self.assertIn('KEEP', result.stdout)
+        self.assertEqual(before, self.snapshot())
+        self.assertTrue(lock.is_file())
+
+    def test_bad_hub_lock_fails_closed(self):
+        lock = self.home / '.hermes/profiles/clean/skills/.hub/lock.json'
+        lock.parent.mkdir(parents=True)
+        for data in ('not json', '{"version":1,"installed":{"sample":{"install_path":"../sample"}}}'):
+            lock.write_text(data)
+            before = self.snapshot()
+            self.assertIn('hub ownership', self.run_cli('--apply', ok=False).stderr)
+            self.assertEqual(before, self.snapshot())
+
+    def test_hub_acquired_managed_link_blocks_uninstall(self):
+        self.run_cli('--apply', '--harness', 'hermes-chiefstaff')
+        target = self.target('.hermes/profiles/chiefstaff/skills')
+        self.hub_lock(target, path='sample')
+        before = self.snapshot()
+        self.assertIn('HUB CONFLICT uninstall', self.run_cli('--uninstall', ok=False).stderr)
+        self.assertEqual(before, self.snapshot())
+
+    def test_legacy_hub_displacement_restores_only_matching_backup(self):
+        target = self.real_skill('.hermes/profiles/chiefstaff/skills/research')
+        self.run_cli('--apply', '--harness', 'hermes-chiefstaff')
+        record = next(iter(self.state().values()))
+        backup = Path(record['original'])
+        lock = self.hub_lock(backup)
+        (backup / 'nested/data').write_bytes(b'changed')
+        changed = self.snapshot()
+        self.assertIn('HUB CONFLICT uninstall', self.run_cli('--uninstall', ok=False).stderr)
+        self.assertEqual(changed, self.snapshot())
+        (backup / 'nested/data').write_bytes(bytes(range(256)))
+        lock_bytes = lock.read_bytes()
+        self.run_cli('--uninstall', '--harness', 'hermes-chiefstaff')
+        self.assertFalse(target.is_symlink())
+        self.assertEqual((target / 'nested/data').read_bytes(), bytes(range(256)))
+        self.assertEqual(lock.read_bytes(), lock_bytes)
+
+    def test_hub_backup_rejects_symlinks_and_special_files(self):
+        target = self.real_skill('.hermes/profiles/chiefstaff/skills/research')
+        self.run_cli('--apply', '--harness', 'hermes-chiefstaff')
+        backup = Path(next(iter(self.state().values()))['original'])
+        lock = self.hub_lock(backup)
+        lock_bytes = lock.read_bytes()
+        original = (backup / 'SKILL.md').read_bytes()
+        external = self.base / 'external'
+        external.mkdir()
+        (external / 'SKILL.md').write_bytes(original)
+        (backup / 'SKILL.md').unlink()
+        (backup / 'SKILL.md').symlink_to(external / 'SKILL.md')
+        self.assertIn('HUB CONFLICT uninstall', self.run_cli('--uninstall', ok=False).stderr)
+        self.assertTrue(target.is_symlink())
+        (backup / 'SKILL.md').unlink()
+        (backup / 'SKILL.md').write_bytes(original)
+        (backup / 'external-dir').symlink_to(external, target_is_directory=True)
+        self.assertIn('HUB CONFLICT uninstall', self.run_cli('--uninstall', ok=False).stderr)
+        self.assertTrue(target.is_symlink())
+        (backup / 'external-dir').unlink()
+        os.mkfifo(backup / 'pipe')
+        self.assertIn('HUB CONFLICT uninstall', self.run_cli('--uninstall', ok=False).stderr)
+        self.assertTrue(target.is_symlink())
+        self.assertEqual(lock.read_bytes(), lock_bytes)
 
     def test_local_source_at_target_is_retained_without_cycle(self):
         local = self.target('.agents/skills', 'local-sample')
