@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# phone: the agent CLI. See SKILL.md. Equivalent to: phone-run python -m phone "$@"
+set -euo pipefail
+exec "$(dirname "${BASH_SOURCE[0]}")/phone-run" python -m phone "$@"

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# phone-run: run a command under uv with uiautomator2 3.7.x and the `phone` package importable.
+#   scripts/phone-run python -m phone devices
+#   scripts/phone-run python my_script.py     (my_script.py does `import phone`)
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+command -v uv >/dev/null 2>&1 || export PATH="$HOME/.local/bin:$PATH"
+command -v uv >/dev/null 2>&1 || { echo "phone-run: uv not found on PATH" >&2; exit 127; }
+export PYTHONPATH="$here${PYTHONPATH:+:$PYTHONPATH}"
+exec uv run --quiet --no-project --with 'uiautomator2>=3.7,<3.8' "$@"
