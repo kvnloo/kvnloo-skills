@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Check tracked working-tree bytes and names without exposing matched values."""
 import argparse
+import os
+import posixpath
 from pathlib import Path
 import re
 import subprocess
@@ -18,10 +20,7 @@ GENERIC = {
 }
 
 
-def check(root):
-    result = subprocess.run(['git', '-C', str(root), 'ls-files', '-z'],
-                            capture_output=True, check=True)
-    names = result.stdout.decode('utf-8', errors='strict').split('\0')
+def load_patterns(root):
     patterns = [(kind, re.compile(pattern)) for kind, pattern in GENERIC.items()]
     local = root / '.public-safe-patterns.local'
     # This file contains literal identifiers, one per line, never regex code.
@@ -30,6 +29,14 @@ def check(root):
             value = line.strip()
             if value and not value.startswith('#'):
                 patterns.append(('local private identifier', re.compile(r'(?<![\w-])' + re.escape(value) + r'(?![\w-])', re.I)))
+    return patterns
+
+
+def check(root, patterns):
+    result = subprocess.run(['git', '-C', str(root), 'ls-files', '-z'],
+                            capture_output=True, check=True)
+    names = result.stdout.decode('utf-8', errors='strict').split('\0')
+    local = root / '.public-safe-patterns.local'
     findings = []
     count = 0
     for name in names:
@@ -69,12 +76,184 @@ def check(root):
     return 0
 
 
+# Limits apply before reading each object and across the complete history scan.
+MAX_OBJECT_BYTES = 16 * 1024 * 1024
+MAX_HISTORY_BYTES = 512 * 1024 * 1024
+MAX_HISTORY_ENTRIES = 1000000
+
+
+def check_history(root, refs, patterns):
+    env = os.environ.copy()
+    env['GIT_NO_REPLACE_OBJECTS'] = '1'
+    env['GIT_NO_LAZY_FETCH'] = '1'
+
+    def git(*args, input_bytes=None):
+        return subprocess.run(['git', '-C', str(root), *args], env=env,
+                              input=input_bytes, stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL, check=True).stdout
+
+    if git('rev-parse', '--is-shallow-repository').strip() != b'false':
+        raise ValueError('shallow repository')
+
+    pending = []
+    for ref in refs:
+        # Do not accept revision expressions or options in place of exact refs.
+        if not ref or ref.startswith('-') or any(c in ref for c in '^~:') or '@{' in ref:
+            raise ValueError('invalid ref')
+        if ref != 'HEAD' and not re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', ref):
+            symbolic = git('rev-parse', '--symbolic-full-name', '--verify',
+                           '--end-of-options', ref).strip()
+            if not symbolic.startswith(b'refs/') or b'\n' in symbolic:
+                raise ValueError('ambiguous or invalid ref')
+        oid = git('rev-parse', '--verify', '--end-of-options', ref).strip()
+        if not re.fullmatch(rb'[0-9a-f]{40}|[0-9a-f]{64}', oid):
+            raise ValueError('invalid object id')
+        pending.append((oid.decode('ascii'), 'root', ''))
+
+    cache = {}
+    expanded = set()
+    findings = []
+    total_bytes = 0
+    entries = 0
+
+    def object_data(oid):
+        nonlocal total_bytes
+        if oid in cache:
+            return cache[oid]
+        info = git('cat-file', '--batch-check=%(objectname) %(objecttype) %(objectsize)',
+                   input_bytes=oid.encode('ascii') + b'\n')
+        parts = info.strip().split()
+        if len(parts) != 3 or parts[0] != oid.encode('ascii'):
+            raise ValueError('missing or invalid object')
+        kind = parts[1].decode('ascii')
+        size = int(parts[2])
+        if size < 0 or size > MAX_OBJECT_BYTES or total_bytes + size > MAX_HISTORY_BYTES:
+            raise ValueError('history object limit')
+        if kind not in ('commit', 'tree', 'blob', 'tag'):
+            raise ValueError('unsupported object')
+        with subprocess.Popen(['git', '-C', str(root), 'cat-file', kind, oid],
+                              env=env, stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL) as process:
+            data = process.stdout.read(size + 1)
+            if len(data) > size:
+                process.kill()
+            status = process.wait()
+        if status:
+            raise ValueError('unreadable object')
+        if len(data) != size:
+            raise ValueError('incomplete object')
+        total_bytes += size
+        cache[oid] = (kind, data)
+        return kind, data
+
+    def scan(oid, location, value):
+        for category, pattern in patterns:
+            line = 1
+            previous = 0
+            for match in pattern.finditer(value):
+                if len(findings) >= MAX_HISTORY_ENTRIES:
+                    raise ValueError('history finding limit')
+                line += value.count('\n', previous, match.start())
+                previous = match.start()
+                findings.append((oid, location, line, category))
+
+    while pending:
+        oid, expected, path = pending.pop()
+        entries += 1
+        if entries > MAX_HISTORY_ENTRIES:
+            raise ValueError('history entry limit')
+        kind, data = object_data(oid)
+        if expected == 'root':
+            if kind not in ('commit', 'tag'):
+                raise ValueError('unsupported history target')
+        elif expected != kind:
+            raise ValueError('object type mismatch')
+
+        # Paths must be checked for each tree occurrence, even when its object
+        # was seen elsewhere. Other object contents can be checked once.
+        key = (oid, path) if kind == 'tree' else (oid, '')
+        if key in expanded:
+            continue
+        expanded.add(key)
+        if kind == 'tree':
+            offset = 0
+            oid_bytes = len(oid) // 2
+            while offset < len(data):
+                space = data.find(b' ', offset)
+                nul = data.find(b'\0', space + 1) if space >= 0 else -1
+                if space < 0 or nul < 0 or nul + 1 + oid_bytes > len(data):
+                    raise ValueError('invalid tree')
+                mode = data[offset:space]
+                name = data[space + 1:nul]
+                if not name or b'/' in name or name in (b'.', b'..'):
+                    raise ValueError('invalid tree name')
+                child_path = posixpath.join(path, name.decode('utf-8', errors='replace'))
+                child_oid = data[nul + 1:nul + 1 + oid_bytes].hex()
+                scan(oid, 'path', child_path)
+                if child_path == '.public-safe-patterns.local':
+                    findings.append((oid, 'path', 0, 'local patterns file is tracked'))
+                if mode in (b'40000', b'040000'):
+                    child_kind = 'tree'
+                elif mode in (b'100644', b'100755', b'120000'):
+                    child_kind = 'blob'
+                else:
+                    raise ValueError('unsupported tree entry')
+                if mode == b'120000':
+                    target_kind, target = object_data(child_oid)
+                    if target_kind != 'blob':
+                        raise ValueError('invalid symlink')
+                    target_text = target.decode('utf-8', errors='replace')
+                    resolved = posixpath.normpath(posixpath.join(posixpath.dirname(child_path), target_text))
+                    if posixpath.isabs(target_text) or resolved == '..' or resolved.startswith('../'):
+                        findings.append((child_oid, 'symlink', 0, 'symlink target outside repository'))
+                pending.append((child_oid, child_kind, child_path))
+                offset = nul + 1 + oid_bytes
+        elif kind == 'blob':
+            scan(oid, 'content', data.decode('utf-8', errors='replace'))
+        else:
+            scan(oid, 'metadata', data.decode('utf-8', errors='replace'))
+            header, separator, _ = data.partition(b'\n\n')
+            if not separator:
+                raise ValueError('invalid object metadata')
+            fields = header.split(b'\n')
+            if kind == 'commit':
+                trees = [line[5:] for line in fields if line.startswith(b'tree ')]
+                parents = [line[7:] for line in fields if line.startswith(b'parent ')]
+                if len(trees) != 1:
+                    raise ValueError('invalid commit')
+                links = [(trees[0], 'tree')] + [(parent, 'commit') for parent in parents]
+            else:
+                objects = [line[7:] for line in fields if line.startswith(b'object ')]
+                types = [line[5:] for line in fields if line.startswith(b'type ')]
+                if len(objects) != 1 or len(types) != 1 or types[0] not in (b'commit', b'tag'):
+                    raise ValueError('unsupported tag target')
+                links = [(objects[0], types[0].decode('ascii'))]
+            for linked, linked_kind in links:
+                if not re.fullmatch(rb'[0-9a-f]{' + str(len(oid)).encode() + rb'}', linked):
+                    raise ValueError('invalid object link')
+                pending.append((linked.decode('ascii'), linked_kind, ''))
+
+    for oid, location, line, category in findings:
+        print(f'FAIL object {oid} {location}:{line}: {category}')
+    if findings:
+        print(f'check-public-safe: FAIL ({len(findings)} history findings)')
+        return 1
+    print(f'check-public-safe: PASS ({len(cache)} history objects)')
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument('--history', action='append', default=[], metavar='REF',
+                        help='also check all objects reachable from this commit or tag ref')
     args = parser.parse_args()
     try:
-        return check(args.root.resolve())
+        root = args.root.resolve()
+        patterns = load_patterns(root)
+        tree_result = check(root, patterns)
+        history_result = check_history(root, args.history, patterns) if args.history else 0
+        return max(tree_result, history_result)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f'check-public-safe: ERROR ({type(error).__name__})', file=sys.stderr)
         return 2

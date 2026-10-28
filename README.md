@@ -86,20 +86,23 @@ A second apply is a no-op. An interrupted apply can be resumed with `--apply` or
 
 If a hub skill was displaced by an older installer, uninstall restores it only when its saved directory matches the hub's recorded content hash and contains no symlinks or special files; otherwise it reports `HUB CONFLICT` without moving anything. This check also prevents uninstall from removing a collection link subsequently claimed by the hub. The short hub hash covers file paths and contents, not empty directories, permissions, provenance or permission to publish.
 
-The historical chiefstaff `research/qmd` displacement needs a separate, approved recovery. Do not run a profile-wide uninstall merely to restore that one skill: it also affects other managed links. First inventory the exact current link, state record, backup and hub lock, then compare the complete saved tree and hub content hash in a disposable home. Rehearse the intended selective restoration and journal handling there, preserve the live link and backup until reviewed, and verify native Hermes discovery and content after an authorized recovery. No recovery or link migration is performed by this checkout. The collection remains held from publication, including its Git history, pending the private-name and authorship reviews.
+The historical chiefstaff `research/qmd` displacement needs a separate, approved recovery. Do not run a profile-wide uninstall merely to restore that one skill: it also affects other managed links. First inventory the exact current link, state record, backup and hub lock, then compare the complete saved tree and hub content hash in a disposable home. Rehearse the intended selective restoration and journal handling there, preserve the live link and backup until reviewed, and verify native Hermes discovery and content after an authorized recovery. No recovery or link migration is performed by this checkout. The collection remains held from publication, including its Git history, pending the private identifier and authorship reviews.
 
 ## Public safety and tests
 
 ```sh
 python3 -m unittest discover -s tests -v
 python3 scripts/check-public-safe
+python3 scripts/check-public-safe --history HEAD
 ```
 
 The check scans every tracked working-tree file, filename and symlink target, including its own script and tests. It rejects machine paths, emails, private host suffixes, IP addresses, common token formats, private keys and private skill names. It reports locations and categories without printing matches. Symlinks outside the repo are rejected without reading their contents.
 
-Copy `.public-safe-patterns.example` to the gitignored `.public-safe-patterns.local` and replace the placeholders with private repository names, hostnames and other local identifiers, one literal per line. The local file is never scanned as content; tracking it causes failure. Generic checks run in CI; machine-specific checks require that local file. The checker is a publication guard, not proof that every possible secret format is detected. It checks the current tracked tree, not Git history or credentials.
+Copy `.public-safe-patterns.example` to the gitignored `.public-safe-patterns.local` and replace the placeholders with private repository names, hostnames and other local identifiers, one literal per line. The local file is never scanned as content; tracking it causes failure. Generic checks run in CI; machine-specific checks require that local file.
 
-Tests use temporary fake homes and repositories. CI runs the stdlib suite, public check and a fake-home plan on Python 3.11 and 3.13. The existing assertion-based skill tests are included in the unittest runner.
+Without `--history`, the checker only examines the current tracked working tree. `--history HEAD` also checks the objects reachable from HEAD, including removed contents, historical paths, symlink targets, commit metadata and messages, and annotated tag metadata when a tag is specified. Repeat `--history REF` to include other exact commit or tag refs; unselected refs are not checked. Incomplete or shallow history and unreadable objects fail closed. Exit status 0 means no findings, 1 means findings, and 2 means an error. The checker is a publication guard, not proof of authorship, permission to publish, or detection of every secret format. A clean result does not lift the publication hold.
+
+Tests use temporary fake homes and repositories. CI runs the stdlib suite, public check and a fake-home plan on Python 3.11 and 3.13. The executable ABAB state tests are included in the unittest runner. Prose substring and heading-order assertions are not behavioral evidence and are not part of the suite.
 
 ## Defaults Kevin can change
 
