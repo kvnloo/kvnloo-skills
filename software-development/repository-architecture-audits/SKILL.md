@@ -1,6 +1,7 @@
 ---
 name: repository-architecture-audits
 description: "Use when auditing repo architecture, lineage or donors."
+author: Kevin Rajan (kvnloo), Hermes Agent
 version: 2.0.0
 license: MIT
 platforms: [linux, macos, windows]

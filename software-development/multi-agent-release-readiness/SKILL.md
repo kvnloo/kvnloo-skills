@@ -1,6 +1,7 @@
 ---
 name: multi-agent-release-readiness
 description: "Use when converging multi-agent work into one release."
+author: Kevin Rajan (kvnloo), Hermes Agent
 version: 2.0.0
 license: MIT
 platforms: [linux, macos, windows]

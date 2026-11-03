@@ -1,6 +1,7 @@
 ---
 name: coding-session-continuity
 description: "Use when recovering and resuming prior coding sessions."
+author: Kevin Rajan (kvnloo), Hermes Agent
 version: 2.0.0
 license: MIT
 platforms: [linux, macos, windows]

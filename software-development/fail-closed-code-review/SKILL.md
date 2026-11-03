@@ -1,6 +1,7 @@
 ---
 name: fail-closed-code-review
 description: "Use when issuing immutable, machine-readable code verdicts."
+author: Kevin Rajan (kvnloo), Hermes Agent
 version: 2.0.0
 license: MIT
 platforms: [linux, macos, windows]

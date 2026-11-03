@@ -1,6 +1,7 @@
 ---
 name: comparative-visual-build-audits
 description: "Use when auditing visual builds against target evidence."
+author: Kevin Rajan (kvnloo), Hermes Agent
 version: 2.0.0
 license: MIT
 platforms: [linux, macos, windows]
