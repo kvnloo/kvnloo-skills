@@ -16,7 +16,6 @@ sys.path.insert(
 )
 
 from abab_state import (  # noqa: E402
-    Evidence,
     Experiment,
     Hypothesis,
     World,
