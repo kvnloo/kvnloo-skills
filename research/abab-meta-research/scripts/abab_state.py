@@ -402,13 +402,6 @@ def learn_payload(world: World) -> dict[str, Any]:
 
 
 def save(world: World, path: Path) -> None:
-    def conv(o: Any) -> Any:
-        if hasattr(o, "__dataclass_fields__"):
-            d = asdict(o)
-            d["_type"] = type(o).__name__
-            return d
-        raise TypeError(type(o))
-
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(asdict(world), indent=2, default=str), encoding="utf-8")
 
