@@ -122,6 +122,10 @@ Deep-mode wave bands (hints, skip/return freely): 1–5 classify/reframe;
 
 ## Pitfalls
 
+- `stopped` latches once set: a fresh world whose first wave adds only
+  evidence used to stop as `objective_resolved` (fixed in `stop_reason`).
+  Check `stopped` after seeding a world.
+
 - Search → summarize → search
 - Ever-growing source lists with no mutation
 - Forcing 25 waves after convergence

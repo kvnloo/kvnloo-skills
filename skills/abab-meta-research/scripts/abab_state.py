@@ -181,7 +181,7 @@ def stop_reason(world: World) -> str | None:
     if world.no_update_streak >= 3:
         return "repeated_no_update"
     ranked = rank_open(world)
-    if not ranked and world.wave > 0:
+    if not ranked and world.wave > 0 and world.hypotheses:  # evidence-first waves are not a resolved graph
         return "objective_resolved"
     if experiment_dominates(world) and world.wave >= 3:
         return "experiment_dominates"
